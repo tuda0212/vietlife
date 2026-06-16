@@ -1,0 +1,13 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.git
+.gitignore
+.dockerignore
+.DS_Store
+.gcloudignore
+temp_sa_key.json
+test_*.py
+run_*.py
