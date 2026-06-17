@@ -9,10 +9,10 @@ def deploy():
     project_id = "gen-lang-client-0738410622"
     dataset_id = "marketing_data"
     
-    # Danh sách các view và file SQL tương ứng
     views = {
         "v_report": "v_report.sql",
         "v_report_y_te": "v_report_y_te.sql",
+        "v_report_y_te_detail": "v_report_y_te_detail.sql",
         "v_report_duoc": "v_report_duoc.sql"
     }
     

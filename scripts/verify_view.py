@@ -22,7 +22,7 @@ def verify():
     dataset_id = "marketing_data"
     client = bigquery.Client(project=project_id)
     
-    for view_name in ["v_report", "v_report_y_te", "v_report_duoc"]:
+    for view_name in ["v_report", "v_report_y_te", "v_report_y_te_detail", "v_report_duoc"]:
         verify_view(client, project_id, dataset_id, view_name)
 
 if __name__ == "__main__":
