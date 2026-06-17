@@ -29,6 +29,7 @@ FB_BATCH_SIZE = 50
 AD_ACCOUNTS = {
     "act_696152742916012": "TK",    # Thần Kinh
     "act_736221869292755": "CXK",   # Cơ Xương Khớp
+    "act_1491394528173951": "CXK",  # Cơ Xương Khớp (Tài khoản mới tháng 3/2026)
     "act_2704042333126518": "VT",   # Vững Cốt (Dược Nano)
 }
 

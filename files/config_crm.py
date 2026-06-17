@@ -122,7 +122,7 @@ CENTER_CRM_SHEETS = {
         "specialty_code": "TK",
         "specialty_name": "Thần Kinh",
         "report_group": "Y tế",
-        "main_tab": "Trung tâm thần kinh",
+        "main_tab": "Data mới",
         "arrival_tab": "Trích data",
         "version": 2025
     },

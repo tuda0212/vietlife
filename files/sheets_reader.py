@@ -26,6 +26,7 @@ from config_crm import (
 logger = logging.getLogger(__name__)
 
 _sheets_service = None
+_arrival_cache = {}
 
 
 def _get_sheets_service():
@@ -307,6 +308,16 @@ def is_arrival_status(value) -> bool:
     return any(kw in norm for kw in ARRIVAL_KEYWORDS)
 
 
+def parse_arrival_date(ma_quan_ly: str) -> str:
+    if not ma_quan_ly:
+        return ""
+    ma_str = str(ma_quan_ly).strip()
+    m = re.search(r"_BA(\d{2})(\d{2})(\d{2})", ma_str)
+    if m:
+        return f"20{m.group(1)}-{m.group(2)}-{m.group(3)}"
+    return ""
+
+
 def read_center_crm_sheet(
     spreadsheet_id: str,
     main_tab: str,
@@ -320,74 +331,125 @@ def read_center_crm_sheet(
     Đọc dữ liệu từ bảng tính Trung tâm CRM (gồm tab data chính và tab data đến cửa).
     Thực hiện ghép nối hai tab bằng SĐT ở trong bộ nhớ.
     """
-    service = _get_sheets_service()
-    sheet_api = service.spreadsheets()
+    global _arrival_cache
+    cache_key = (spreadsheet_id, arrival_tab)
 
-    # Lấy thông tin metadata của sheet trước
-    meta = sheet_api.get(spreadsheetId=spreadsheet_id).execute()
+    if cache_key in _arrival_cache:
+        arrival_map = _arrival_cache[cache_key]
+        logger.info(f"[Sheets] Tái sử dụng arrival_map từ cache cho {cache_key}")
+    else:
+        service = _get_sheets_service()
+        sheet_api = service.spreadsheets()
 
-    # 1. Đọc tab đến cửa/doanh thu
-    arrival_map = {}
-    has_arrival = False
-    for s in meta["sheets"]:
-        if s["properties"]["title"] == arrival_tab:
-            has_arrival = True
-            break
+        # Lấy thông tin metadata của sheet trước
+        meta = sheet_api.get(spreadsheetId=spreadsheet_id).execute()
 
-    if has_arrival:
-        try:
-            # Đọc dòng đầu tiên để lấy header
-            header_res = sheet_api.values().get(
-                spreadsheetId=spreadsheet_id,
-                range=f"'{arrival_tab}'!A1:Z1",
-                valueRenderOption="UNFORMATTED_VALUE"
-            ).execute()
-            headers = [str(h).strip().lower() for h in header_res.get("values", [[]])[0]]
-            
-            # Mặc định index cũ
-            phone_idx = 0
-            rev_idx = 6
-            
-            # Tìm kiếm cột SĐT và Thành tiền động
-            for idx, h in enumerate(headers):
-                if "so_dien_thoai" in h or "so dien thoai" in h or "sdt" in h:
-                    phone_idx = idx
-                elif "thanh_tien" in h or "thanh tien" in h or "doanh thu" in h:
-                    rev_idx = idx
-            
-            max_idx = max(phone_idx, rev_idx)
-            logger.info(f"[Sheets] Tab đến cửa '{arrival_tab}': SĐT=cột {phone_idx}, Doanh thu=cột {rev_idx}")
-            
-            result = sheet_api.values().get(
-                spreadsheetId=spreadsheet_id,
-                range=f"'{arrival_tab}'!A2:Z30000",
-                valueRenderOption="UNFORMATTED_VALUE"
-            ).execute()
-            values = result.get("values", [])
-            for row in values:
-                while len(row) <= max_idx:
-                    row.append("")
-                phone_raw = str(row[phone_idx]).strip()
-                phone = normalize_phone(phone_raw)
-                if not phone:
-                    continue
+        arrival_map = {}
+        has_arrival = False
+        for s in meta["sheets"]:
+            if s["properties"]["title"] == arrival_tab:
+                has_arrival = True
+                break
 
-                rev_raw = str(row[rev_idx]).strip() if row[rev_idx] is not None else "0"
-                rev_clean = rev_raw.replace(".", "").replace(",", "")
-                try:
-                    revenue = float(rev_clean)
-                except ValueError:
-                    revenue = 0.0
+        if has_arrival:
+            try:
+                # Đọc dòng đầu tiên để lấy header
+                header_res = sheet_api.values().get(
+                    spreadsheetId=spreadsheet_id,
+                    range=f"'{arrival_tab}'!A1:Z1",
+                    valueRenderOption="UNFORMATTED_VALUE"
+                ).execute()
+                headers = [str(h).strip().lower() for h in header_res.get("values", [[]])[0]]
+                
+                # Mặc định index cũ
+                phone_idx = 0
+                rev_idx = 6
+                
+                # Tìm kiếm cột SĐT và Thành tiền động
+                for idx, h in enumerate(headers):
+                    if "so_dien_thoai" in h or "so dien thoai" in h or "sdt" in h:
+                        phone_idx = idx
+                    elif "thanh_tien" in h or "thanh tien" in h or "doanh thu" in h:
+                        rev_idx = idx
+                
+                max_idx = max(phone_idx, rev_idx)
+                logger.info(f"[Sheets] Tab đến cửa '{arrival_tab}': SĐT=cột {phone_idx}, Doanh thu=cột {rev_idx}")
+                
+                # Đọc tối đa 200,000 dòng vì tab 'Data Đến Cửa' chung rất lớn (~141,000 dòng)
+                result = sheet_api.values().get(
+                    spreadsheetId=spreadsheet_id,
+                    range=f"'{arrival_tab}'!A2:Z200000",
+                    valueRenderOption="UNFORMATTED_VALUE"
+                ).execute()
+                values = result.get("values", [])
+                
+                seen_ma_ql = set()
+                for row in values:
+                    # Đảm bảo hàng có độ dài tối thiểu 5 cột
+                    while len(row) < 5:
+                        row.append("")
+                    
+                    if arrival_tab == "Data Đến Cửa":
+                        ma_ql = str(row[1]).strip()
+                    else:
+                        ma_ql = str(row[0]).strip()
 
-                if phone in arrival_map:
-                    arrival_map[phone]["revenue"] += revenue
-                else:
-                    arrival_map[phone] = {
-                        "revenue": revenue,
-                        "is_arrival": True
-                    }
-        except Exception as e:
-            logger.warning(f"[Sheets] Không đọc được tab đến cửa '{arrival_tab}' từ {spreadsheet_id}: {e}")
+                    if not ma_ql:
+                        continue
+                    # Lọc trùng theo Mã quản lý để tránh nhân đôi doanh thu
+                    if ma_ql in seen_ma_ql:
+                        continue
+                    seen_ma_ql.add(ma_ql)
+                    
+                    # Xử lý lệch cột đặc biệt cho tab 'Data Đến Cửa' của sheet mới
+                    if arrival_tab == "Data Đến Cửa" and len(row) >= 5:
+                        val_col2 = str(row[2]).strip()  # Cột C (SĐT không 0 hoặc có 0)
+                        val_col3 = str(row[3]).strip()  # Cột D (SĐT có 0 hoặc doanh thu)
+                        val_col4 = str(row[4]).strip()  # Cột E (Doanh thu hoặc chữ)
+                        
+                        phone_2 = normalize_phone(val_col2)
+                        phone_3 = normalize_phone(val_col3)
+                        
+                        # Nếu cột D cũng chứa SĐT hợp lệ (sau khi chuẩn hóa)
+                        if phone_3 and (phone_2 == phone_3 or (phone_3.startswith("0") and len(phone_3) >= 9)):
+                            phone = phone_3
+                            rev_raw = val_col4
+                        else:
+                            phone = phone_2 if phone_2 else phone_3
+                            rev_raw = val_col3
+                    else:
+                        # Logic bình thường cho các sheet khác
+                        while len(row) <= max_idx:
+                            row.append("")
+                        phone_raw = str(row[phone_idx]).strip()
+                        phone = normalize_phone(phone_raw)
+                        rev_raw = row[rev_idx]
+
+                    if not phone:
+                        continue
+
+                    rev_clean = str(rev_raw).replace(".", "").replace(",", "").strip()
+                    # Kiểm tra an toàn: nếu doanh thu trông giống số điện thoại (ví dụ: bắt đầu bằng 0 và dài >= 9 số)
+                    # thì gán doanh thu = 0 để tránh nhận diện nhầm SĐT thành doanh thu khổng lồ
+                    if rev_clean.startswith("0") and len(rev_clean) >= 9:
+                        revenue = 0.0
+                    else:
+                        try:
+                            revenue = float(rev_clean)
+                        except ValueError:
+                            revenue = 0.0
+
+                    arr_date = parse_arrival_date(ma_ql)
+                    if phone not in arrival_map:
+                        arrival_map[phone] = []
+                    arrival_map[phone].append({
+                        "date": arr_date,
+                        "revenue": revenue
+                    })
+                # Lưu vào cache sau khi đọc xong
+                _arrival_cache[cache_key] = arrival_map
+            except Exception as e:
+                logger.warning(f"[Sheets] Không đọc được tab đến cửa '{arrival_tab}' từ {spreadsheet_id}: {e}")
 
     # 2. Đọc tab data chính
     rows = []
@@ -433,28 +495,50 @@ def read_center_crm_sheet(
             channel = str(row[6]).strip()      # Col 6: Kênh/Bác sĩ
             booking_val = row[booking_idx]     # Col 11 hoặc 12: Kết quả liên hệ
 
-            lead_date = parse_date_robust(date_raw)
+            lead_date_str = parse_date_robust(date_raw)
             phone = normalize_phone(phone_raw)
 
-            if not lead_date or not phone:
+            if not lead_date_str or not phone:
                 continue
 
             # Lọc theo khoảng ngày cần đồng bộ
-            if lead_date < start_date or lead_date > end_date:
+            if lead_date_str < start_date or lead_date_str > end_date:
                 continue
 
             is_booking = is_booking_status(booking_val)
-            arr_info = arrival_map.get(phone, {"revenue": 0.0, "is_arrival": False})
+            
+            # Khớp doanh thu & đến cửa theo logic ngày khám trong vòng 30 ngày kể từ lead_date
+            is_arrival = False
+            revenue = 0.0
+            
+            if phone in arrival_map:
+                try:
+                    lead_date_dt = datetime.strptime(lead_date_str, "%Y-%m-%d")
+                    valid_visits = []
+                    for visit in arrival_map[phone]:
+                        if visit["date"]:
+                            try:
+                                arr_date_dt = datetime.strptime(visit["date"], "%Y-%m-%d")
+                                # Chỉ tính ca khám xảy ra từ ngày đăng ký lead đến 30 ngày sau đó
+                                if arr_date_dt >= lead_date_dt and arr_date_dt <= lead_date_dt + timedelta(days=30):
+                                    valid_visits.append(visit)
+                            except ValueError:
+                                pass
+                    if valid_visits:
+                        is_arrival = True
+                        revenue = sum(v["revenue"] for v in valid_visits)
+                except Exception:
+                    pass
 
             rows.append({
-                "lead_date": lead_date,
+                "lead_date": lead_date_str,
                 "phone": phone,
                 "channel": channel,
                 "booking_status": normalize_status_text(booking_val),
-                "arrival_status": "Đến cửa" if arr_info["is_arrival"] else "Chưa đến cửa",
+                "arrival_status": "Đến cửa" if is_arrival else "Chưa đến cửa",
                 "is_booking": is_booking,
-                "is_arrival": arr_info["is_arrival"],
-                "revenue": arr_info["revenue"]
+                "is_arrival": is_arrival,
+                "revenue": revenue
             })
 
         if len(values) < CRM_READ_CHUNK:
