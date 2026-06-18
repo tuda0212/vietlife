@@ -1,0 +1,88 @@
+name: CI — Kiểm Tra Code Tự Động
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [develop]
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # JOB 1: Kiểm tra code style (lint)
+  # ───────────────────────────────────────────────────────────────────────────
+  lint:
+    name: 🔍 Lint — Kiểm tra code style
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Cài đặt dependencies
+        run: |
+          pip install flake8 flake8-bugbear
+
+      - name: Chạy flake8 lint
+        run: |
+          flake8 files/ scripts/ \
+            --max-line-length=120 \
+            --exclude=files/.venv,files/__pycache__,scripts/__pycache__ \
+            --extend-ignore=E501,W503 \
+            --count --statistics
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # JOB 2: Kiểm tra bảo mật — phát hiện secrets bị commit
+  # ───────────────────────────────────────────────────────────────────────────
+  security:
+    name: 🔐 Security — Phát hiện secrets bị commit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Lấy toàn bộ lịch sử để scan
+
+      - name: Kiểm tra token bị hardcode
+        run: |
+          echo "Quét tìm Facebook Access Token bị hardcode..."
+          if grep -rn 'EAA[A-Za-z0-9]\{20,\}' --include="*.py" .; then
+            echo "❌ PHÁT HIỆN Facebook Access Token bị hardcode trong code!"
+            echo "   Hãy xóa token và dùng biến môi trường (.env)"
+            exit 1
+          fi
+          echo "✅ Không phát hiện token bị hardcode"
+
+      - name: Kiểm tra service account key bị commit
+        run: |
+          echo "Kiểm tra file credentials JSON..."
+          if find . -name "*credentials*.json" -o -name "*service-account*.json" -o -name "*-sa.json" 2>/dev/null | grep -v ".git"; then
+            echo "❌ PHÁT HIỆN credentials file bị commit!"
+            exit 1
+          fi
+          echo "✅ Không phát hiện credentials file"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # JOB 3: Kiểm tra cú pháp Python
+  # ───────────────────────────────────────────────────────────────────────────
+  syntax:
+    name: 🐍 Python — Kiểm tra cú pháp
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Kiểm tra syntax tất cả file .py
+        run: |
+          find files/ scripts/ -name "*.py" | while read f; do
+            python3 -m py_compile "$f" && echo "✅ $f" || (echo "❌ Lỗi cú pháp: $f"; exit 1)
+          done
