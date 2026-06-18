@@ -2,35 +2,35 @@ import sys
 import os
 import socket
 
-# Thiết lập timeout lớn hơn để tránh lỗi
-socket.setdefaulttimeout(90)
+socket.setdefaulttimeout(15)
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from sheets_reader import _get_sheets_service
 
 def main():
-    sheet_id = "1guUru-qTB6Pug4Oc43fqoEw3UUVmFXs2R7MAUr3AIGY"
-    target_title = "Hiệu quả bài (T3)"
-    print(f"Connecting to Google Sheets API and reading: {target_title}")
+    # Thử đọc sheet Vũ Anh (đã chạy thành công trước đó)
+    sheet_id = "1IpRGhylPd4TENwT4tZq5mOZnTzLmttkn4l8FejWtNZE"
+    print(f"Connecting to Google Sheets API and reading known working sheet: {sheet_id}")
     try:
         service = _get_sheets_service()
         sheet_api = service.spreadsheets()
         
-        # Đọc 150 dòng đầu tiên của sheet
+        meta = sheet_api.get(spreadsheetId=sheet_id).execute()
+        first_title = meta["sheets"][0]["properties"]["title"]
+        print(f"First tab title: {first_title}")
+        
         result = sheet_api.values().get(
             spreadsheetId=sheet_id,
-            range=f"'{target_title}'!A1:T150",
-            valueRenderOption="UNFORMATTED_VALUE"
+            range=f"'{first_title}'!A1:D10",
+            valueRenderOption="FORMATTED_VALUE"
         ).execute()
         
         values = result.get("values", [])
-        print(f"Read {len(values)} rows:")
+        print("Success! Read A1:D10:")
         for i, row in enumerate(values):
-            clean_row = [str(cell) if cell is not None else "" for cell in row]
-            if any(clean_row):
-                print(f"Row {i+1}: {clean_row[:18]}")
-                
+            print(f"Row {i+1}: {row}")
+            
     except Exception as e:
         print(f"Error: {e}")
 

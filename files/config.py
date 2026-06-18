@@ -31,6 +31,8 @@ AD_ACCOUNTS = {
     "act_736221869292755": "CXK",   # Cơ Xương Khớp
     "act_1491394528173951": "CXK",  # Cơ Xương Khớp (Tài khoản mới tháng 3/2026)
     "act_2704042333126518": "VT",   # Vững Cốt (Dược Nano)
+    "act_1433365117712667": "CS",   # Cột Sống (BS Tuyên)
+    "act_2031624244397226": "CXK",  # Cơ Xương Khớp (Tài khoản mới - tạm map CXK)
 }
 
 # =================================================================
