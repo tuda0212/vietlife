@@ -334,16 +334,16 @@ def read_center_crm_sheet(
     global _arrival_cache
     cache_key = (spreadsheet_id, arrival_tab)
 
+    service = _get_sheets_service()
+    sheet_api = service.spreadsheets()
+
+    # Lấy thông tin metadata của sheet trước
+    meta = sheet_api.get(spreadsheetId=spreadsheet_id).execute()
+
     if cache_key in _arrival_cache:
         arrival_map = _arrival_cache[cache_key]
         logger.info(f"[Sheets] Tái sử dụng arrival_map từ cache cho {cache_key}")
     else:
-        service = _get_sheets_service()
-        sheet_api = service.spreadsheets()
-
-        # Lấy thông tin metadata của sheet trước
-        meta = sheet_api.get(spreadsheetId=spreadsheet_id).execute()
-
         arrival_map = {}
         has_arrival = False
         for s in meta["sheets"]:
