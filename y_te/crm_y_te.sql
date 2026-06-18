@@ -14,7 +14,10 @@ SELECT
   specialty_name,
   page_id,
   ad_id,
-  ad_name
+  ad_name,
+  subscriber_id,
+  conversation_id,
+  note
 FROM `gen-lang-client-0738410622.marketing_data.botcake_leads`
 WHERE report_group = 'Y tế'
   AND phone IS NOT NULL AND phone != '';

@@ -10,19 +10,18 @@ def deploy():
     dataset_id = "marketing_data"
     
     views = {
-        "v_report": "v_report.sql",
-        "v_report_y_te": "v_report_y_te.sql",
-        "v_report_y_te_detail": "v_report_y_te_detail.sql",
-        "v_report_duoc": "v_report_duoc.sql",
-        
-        # Các view Y tế mới
+        # Deploy các view nền tảng (dependencies) trước
         "v_fb_ads_y_te": "y_te/facebook_ads.sql",
         "v_sdt_page_bac_si": "y_te/sdt_page_bac_si.sql",
         "v_crm_y_te": "y_te/crm_y_te.sql",
-        
-        # Các view Dược mới
         "v_fb_ads_duoc": "duoc/facebook_ads.sql",
-        "v_sdt_dat_mua": "duoc/sdt_dat_mua.sql"
+        "v_sdt_dat_mua": "duoc/sdt_dat_mua.sql",
+        
+        # Deploy các view báo cáo tổng hợp sau
+        "v_report_y_te": "v_report_y_te.sql",
+        "v_report_y_te_detail": "v_report_y_te_detail.sql",
+        "v_report_duoc": "v_report_duoc.sql",
+        "v_report_duoc_detail": "v_report_duoc_detail.sql"
     }
     
     client = bigquery.Client(project=project_id)
