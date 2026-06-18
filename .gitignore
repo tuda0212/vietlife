@@ -1,0 +1,102 @@
+# =============================================================================
+# SECRETS & CREDENTIALS — KHÔNG BAO GIỜ COMMIT CÁC FILE NÀY
+# =============================================================================
+
+# Ignore tất cả .env files (có giá trị thật)
+.env
+.env.local
+.env.production
+.env.staging
+
+# Chỉ KHÔNG ignore file mẫu (không có giá trị thật)
+!.env.example
+
+# Google Service Account keys
+*-sa.json
+*service-account*.json
+*credentials*.json
+*serviceaccount*.json
+secrets/
+credentials/
+
+# =============================================================================
+# PYTHON
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# =============================================================================
+# macOS
+# =============================================================================
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# =============================================================================
+# IDE & EDITORS
+# =============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+
+# =============================================================================
+# DỮ LIỆU CỤC BỘ — KHÔNG CẦN CHIA SẺ
+# =============================================================================
+*.csv
+*.xlsx
+*.log
+logs/
+tmp/
+temp/
+files_local/
+output/
+
+# =============================================================================
+# DOCKER
+# =============================================================================
+# Giữ Dockerfile nhưng ignore build artifacts
+.dockerignore

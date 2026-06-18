@@ -222,19 +222,26 @@ def run(
                         # B) Xác định thông tin bác sĩ để gán page_id và doctor_name
                         meta_doc = _map_channel_to_doctor_meta(channel, specialty_code)
                         
+                        # Khởi tạo chuyên khoa mặc định từ cấu hình Trung tâm
+                        lead_specialty_code = specialty_code
+                        lead_specialty_name = specialty_name
+                        
                         if ad_info:
                             # Nếu khớp SĐT quảng cáo, lấy page_id (spreadsheet_id) của bác sĩ đó
                             page_id = ad_info["spreadsheet_id"]
-                            # Tìm doctor_name tương ứng
                             doctor_name = "TỰ NHIÊN / KHÁC"
                             for k, v in DOCTOR_SHEETS.items():
                                 if v["spreadsheet_id"] == page_id:
                                     doctor_name = v["doctor_name"]
+                                    lead_specialty_code = v["specialty_code"]
+                                    lead_specialty_name = v["specialty_name"]
                                     break
                         elif meta_doc:
                             # Nếu không khớp SĐT quảng cáo nhưng khớp tên bác sĩ qua cột Kênh
                             page_id = meta_doc["page_id"]
                             doctor_name = meta_doc["doctor_name"]
+                            lead_specialty_code = meta_doc["specialty_code"]
+                            lead_specialty_name = meta_doc["specialty_name"]
                         else:
                             # Mặc định
                             page_id = spreadsheet_id  # Dùng spreadsheet_id của Trung tâm làm page_id tạm
@@ -245,8 +252,8 @@ def run(
                             "lead_date":        r["lead_date"],
                             "page_id":          page_id,
                             "doctor_name":      doctor_name,
-                            "specialty_code":   specialty_code,
-                            "specialty_name":   specialty_name,
+                            "specialty_code":   lead_specialty_code,
+                            "specialty_name":   lead_specialty_name,
                             "report_group":     "Y tế",
                             "subscriber_id":    subscriber_id,
                             "phone":            phone,

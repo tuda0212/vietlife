@@ -1,9 +1,30 @@
 import sys
 import os
 import logging
+from pathlib import Path
 
-# Thiết lập token lấy từ Secret Manager TRƯỚC khi import các module khác
-os.environ["FB_ACCESS_TOKEN"] = "EAAtyg8bAspcBRV3J9D9yZBErzbn0UteDCSBX9641yefznirlgVi1NNCHWPwwmP76AIGE0ju6xtO84pZC1ZAOQIk8ZApz67U6vNtZCZArtYpdpe0yJV0hkKY588JgCtsKZA6mY4pfmnqsvPenvkxtd4W4d5iAzZBc47mWHHhAvzl6LbZAY5iYXZA5bZAZAcDVDpDLj4iSjAZDZD"
+# ─────────────────────────────────────────────────────────────────────────────
+# Load biến môi trường từ file .env (nếu có) — KHÔNG BAO GIỜ hardcode token
+# File .env nằm ở thư mục gốc repo, KHÔNG được commit vào Git
+# ─────────────────────────────────────────────────────────────────────────────
+workspace_root = Path(__file__).resolve().parent.parent
+env_file = workspace_root / ".env"
+
+if env_file.exists():
+    with open(env_file) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, _, value = line.partition("=")
+                os.environ.setdefault(key.strip(), value.strip())
+
+if not os.environ.get("FB_ACCESS_TOKEN"):
+    raise EnvironmentError(
+        "❌ Thiếu FB_ACCESS_TOKEN!\n"
+        "   Hãy tạo file .env ở thư mục gốc repo và thêm dòng:\n"
+        "   FB_ACCESS_TOKEN=your_token_here\n"
+        "   (Xem .env.example để biết cú pháp)"
+    )
 
 # Thêm thư mục 'files' vào sys.path để import pipeline
 workspace_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

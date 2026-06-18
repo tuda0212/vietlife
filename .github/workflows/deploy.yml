@@ -1,0 +1,67 @@
+name: CD — Deploy lên Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'files/**'          # Chỉ deploy khi code trong files/ thay đổi
+      - '.github/workflows/deploy.yml'
+
+  # Cho phép chạy tay từ GitHub UI
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Lý do deploy tay'
+        required: false
+        default: 'Manual deploy'
+
+jobs:
+  deploy:
+    name: 🚀 Deploy → Cloud Run (asia-southeast1)
+    runs-on: ubuntu-latest
+
+    # Chỉ deploy từ nhánh main
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Xác thực với Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Cài đặt gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Deploy lên Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: fb-pipeline
+          region: asia-southeast1
+          source: ./files
+          env_vars: |
+            GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
+            BQ_DATASET=${{ secrets.BQ_DATASET }}
+
+      - name: Thông báo kết quả
+        run: |
+          echo "✅ Deploy thành công!"
+          echo "   Service: fb-pipeline"
+          echo "   Region:  asia-southeast1"
+          echo "   Commit:  ${{ github.sha }}"
+          echo "   By:      ${{ github.actor }}"
+
+# =============================================================================
+# HƯỚNG DẪN THIẾT LẬP SECRETS TRÊN GITHUB
+# =============================================================================
+# Vào: github.com/tuda0212/Vietlife → Settings → Secrets and variables → Actions
+#
+# Thêm các secrets sau:
+#   GCP_SA_KEY       → Nội dung file JSON của Service Account (base64 hoặc raw)
+#   GCP_PROJECT_ID   → gen-lang-client-0738410622
+#   BQ_DATASET       → marketing_data
+# =============================================================================

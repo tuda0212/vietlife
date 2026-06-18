@@ -5,9 +5,31 @@ sync_all_fb_ads.py — Script chạy đồng bộ dữ liệu Facebook Ads cho 6
 import os
 import sys
 import logging
+from pathlib import Path
 
-# Thiết lập token Facebook
-os.environ["FB_ACCESS_TOKEN"] = "EAAtyg8bAspcBRV3J9D9yZBErzbn0UteDCSBX9641yefznirlgVi1NNCHWPwwmP76AIGE0ju6xtO84pZC1ZAOQIk8ZApz67U6vNtZCZArtYpdpe0yJV0hkKY588JgCtsKZA6mY4pfmnqsvPenvkxtd4W4d5iAzZBc47mWHHhAvzl6LbZAY5iYXZA5bZAZAcDVDpDLj4iSjAZDZD"
+# ─────────────────────────────────────────────────────────────────────────────
+# Load biến môi trường từ file .env — KHÔNG BAO GIỜ hardcode token vào code
+# File .env nằm ở thư mục gốc repo, được liệt kê trong .gitignore
+# ─────────────────────────────────────────────────────────────────────────────
+workspace_root = Path(__file__).resolve().parent.parent
+env_file = workspace_root / ".env"
+
+if env_file.exists():
+    with open(env_file) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, _, value = line.partition("=")
+                os.environ.setdefault(key.strip(), value.strip())
+
+if not os.environ.get("FB_ACCESS_TOKEN"):
+    raise EnvironmentError(
+        "❌ Thiếu FB_ACCESS_TOKEN!\n"
+        "   Hãy tạo file .env ở thư mục gốc repo và thêm dòng:\n"
+        "   FB_ACCESS_TOKEN=your_token_here\n"
+        "   (Xem .env.example để biết cú pháp)"
+    )
+
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
