@@ -7,7 +7,7 @@ CREATE OR REPLACE VIEW `gen-lang-client-0738410622.marketing_data.v_report_y_te_
       end_date,                                                                                  
       specialty_code,                                                                            
       specialty_name,                                                                            
-      doctor_name,                                                                               
+      REPLACE(doctor_name, 'Bs ', 'BS ')                          AS doctor_name,                
       post_id,                                                                                   
       post_link,                                                                                 
       MAX(thumbnail_url)                                          AS thumbnail_url,              
@@ -150,7 +150,7 @@ CREATE OR REPLACE VIEW `gen-lang-client-0738410622.marketing_data.v_report_y_te_
     SELECT                                                                                       
       c.lead_date                          AS start_date,                                        
       c.lead_date                          AS end_date,                                          
-      c.doctor_name,                                                                             
+      REPLACE(c.doctor_name, 'Bs ', 'BS ') AS doctor_name,                                       
       c.specialty_name,                                                                          
       c.specialty_code,                                                                          
       'TỰ NHIÊN / KHÁC'                    AS post_status,                                       
