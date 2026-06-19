@@ -27,6 +27,7 @@ def transform(
     start_date: str,
     end_date: str,
     run_date: str,
+    gcs_thumbnail_map: dict = None,
 ) -> list[dict]:
     """
     Biến đổi raw insights + ad_details → list[dict] sẵn sàng insert BigQuery.
@@ -63,7 +64,13 @@ def transform(
 
         post_id        = get_post_id(creative, item.get("ad_name") or "")
         post_link      = f"https://facebook.com/{post_id}" if post_id else ""
-        thumbnail_url  = get_thumbnail_url(creative)
+        
+        # Ưu tiên lấy URL đã được lưu trên GCS, fallback về get_thumbnail_url gốc
+        if gcs_thumbnail_map and ad_id in gcs_thumbnail_map:
+            thumbnail_url = gcs_thumbnail_map[ad_id]
+        else:
+            thumbnail_url = get_thumbnail_url(creative)
+            
         content        = get_creative_text(creative)
 
         # Actions

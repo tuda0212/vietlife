@@ -11,6 +11,7 @@ import os
 GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "gen-lang-client-0738410622")
 BQ_DATASET     = os.environ.get("BQ_DATASET", "marketing_data")
 BQ_TABLE       = os.environ.get("BQ_TABLE", "fb_ad_insights")
+GCS_BUCKET_NAME = os.environ.get("GCS_BUCKET_NAME", "vietlife-marketing-thumbnails")
 
 # =================================================================
 # FACEBOOK API

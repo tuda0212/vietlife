@@ -9,10 +9,11 @@ pipeline.py — Điều phối toàn bộ luồng:
 import logging
 from datetime import date, timedelta
 
-from config import AD_ACCOUNTS, DEFAULT_LOOKBACK_DAYS
+from config import AD_ACCOUNTS, DEFAULT_LOOKBACK_DAYS, GCS_BUCKET_NAME
 from fb_api import fetch_all_accounts, fetch_ad_details, normalize_ad_id
 from transform import transform
 from bq_loader import upsert_rows
+from gcs_helper import upload_thumbnails_to_gcs_batch
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,15 @@ def run(
     ad_details = fetch_ad_details(unique_ad_ids)
     logger.info(f"[B2] Lấy được chi tiết {len(ad_details)} ad")
 
+    # --- B2.5: Upload thumbnails lên GCS song song ---
+    logger.info("[B2.5] Đồng bộ ảnh Ad Thumbnail lên GCS...")
+    gcs_thumbnail_map = {}
+    try:
+        gcs_thumbnail_map = upload_thumbnails_to_gcs_batch(ad_details, GCS_BUCKET_NAME)
+        logger.info(f"[B2.5] Hoàn tất đồng bộ {len(gcs_thumbnail_map)} ảnh lên GCS.")
+    except Exception as gcs_err:
+        logger.error(f"[B2.5] Bỏ qua lỗi đồng bộ ảnh GCS (luồng chính vẫn tiếp tục): {gcs_err}")
+
     # --- B3: Transform ---
     logger.info("[B3] Transform dữ liệu...")
     rows = transform(
@@ -82,6 +92,7 @@ def run(
         start_date         = start_str,
         end_date           = end_str,
         run_date           = run_str,
+        gcs_thumbnail_map  = gcs_thumbnail_map,
     )
     logger.info(f"[B3] {len(rows)} dòng sẵn sàng insert")
 
