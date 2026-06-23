@@ -25,7 +25,6 @@ logging.basicConfig(level=logging.INFO)
 
 def main():
     spreadsheet_id = "10sWUCv1uYk5X2CKfcwOqbd5K3JXjPmty00yb9IJkK0c"
-    target_gid = 1723988113
     
     service = _get_sheets_service()
     sheet_api = service.spreadsheets()
@@ -33,14 +32,11 @@ def main():
     print("Fetching spreadsheet metadata...")
     meta = sheet_api.get(spreadsheetId=spreadsheet_id).execute()
     
-    target_sheet_title = None
+    print("\nAvailable sheets in spreadsheet:")
     for sheet in meta.get("sheets", []):
         props = sheet.get("properties", {})
-        if props.get("sheetId") == target_gid:
-            target_sheet_title = props.get("title")
-            print(f"Found target sheet: '{target_sheet_title}' with gid {target_gid}")
-            print(f"Properties: {props}")
-            break
+        print(f"- {props.get('title')} (id: {props.get('sheetId')})")
+    return
             
     if not target_sheet_title:
         print(f"Could not find sheet with gid {target_gid}. Available sheets:")
