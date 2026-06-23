@@ -2,6 +2,7 @@
 # Script to analyze pancake chat history and match it with ad creatives.
 # This script is written in 100% ASCII to avoid encoding issues in Windows PowerShell.
 # All Vietnamese keywords and labels are loaded from keywords.json.
+# Exports results to both Markdown (evaluation_report.md) and Excel-friendly CSV (evaluation_report.csv).
 
 param(
     [string]$StartDate,
@@ -36,7 +37,6 @@ if ($StartDate) {
     Write-Host "[*] Filtering chats starting from: $StartDate" -ForegroundColor Yellow
 }
 if ($EndDate) {
-    # Set to end of day
     $filterEnd = [DateTime]::ParseExact($EndDate, "yyyy-MM-dd", $null).AddDays(1).AddTicks(-1)
     Write-Host "[*] Filtering chats up to: $EndDate" -ForegroundColor Yellow
 }
@@ -157,7 +157,7 @@ foreach ($chat in $chats) {
     }
 }
 
-# Generate Markdown Report
+# Generate Markdown Report & CSV Data
 $report = New-Object System.Text.StringBuilder
 [void]$report.AppendLine($l.reportTitle)
 
@@ -180,9 +180,10 @@ if ($StartDate -or $EndDate) {
 [void]$report.AppendLine("|---|---|---|---|---|---|")
 
 $sortedStats = $adStats.Values | Sort-Object TotalChats -Descending
+$csvData = @()
 
 foreach ($stats in $sortedStats) {
-    if ($stats.TotalChats -lt 1) { continue } # Show all active ads in this period
+    if ($stats.TotalChats -lt 1) { continue }
     
     $phoneRate = ($stats.PhoneLeads / $stats.TotalChats) * 100
     $bookingRate = ($stats.Bookings / $stats.TotalChats) * 100
@@ -235,6 +236,8 @@ foreach ($stats in $sortedStats) {
     $costRate = ($stats.PainCost / $stats.TotalChats) * 100
     $sympRate = ($stats.PainSymptoms / $stats.TotalChats) * 100
     $fearRate = ($stats.PainFearSurgery / $stats.TotalChats) * 100
+    $trustRate = ($stats.PainTrust / $stats.TotalChats) * 100
+    $locRate = ($stats.PainLocation / $stats.TotalChats) * 100
 
     $lineAdHeader = "{0}: {1} ({2})" -f $l.adIdLabel, $adId, $adName
     [void]$report.AppendLine($lineAdHeader)
@@ -291,9 +294,35 @@ foreach ($stats in $sortedStats) {
     [void]$report.AppendLine()
     [void]$report.AppendLine("---")
     [void]$report.AppendLine()
+
+    # Collect row for CSV (Excel) export
+    $csvRow = [PSCustomObject]@{
+        "Ad ID"              = $adId
+        "Ad Name"            = $adName
+        "Total Chats"        = $stats.TotalChats
+        "Phone Leads"        = $stats.PhoneLeads
+        "Phone Lead Rate %"  = $phoneRate.ToString("N1")
+        "Bookings"           = $stats.Bookings
+        "Booking Rate %"     = $bookingRate.ToString("N1")
+        "Symptom Rate %"     = $sympRate.ToString("N1")
+        "Cost Rate %"        = $costRate.ToString("N1")
+        "Surgery Fear Rate %"= $fearRate.ToString("N1")
+        "Trust Rate %"       = $trustRate.ToString("N1")
+        "Location Rate %"    = $locRate.ToString("N1")
+        "Ad Copy"            = $adBody
+    }
+    $csvData += $csvRow
 }
 
-$outputPath = "evaluation_report.md"
-$fullPath = (Get-Item .).FullName + "/" + $outputPath
-[System.IO.File]::WriteAllText($fullPath, $report.ToString(), [System.Text.Encoding]::UTF8)
-Write-Host "[+] Report generated successfully at: $outputPath"
+# Save Markdown Report
+$outputPathMd = "evaluation_report.md"
+$fullPathMd = (Get-Item .).FullName + "/" + $outputPathMd
+[System.IO.File]::WriteAllText($fullPathMd, $report.ToString(), [System.Text.Encoding]::UTF8)
+
+# Save CSV (Excel) Report with UTF-8 BOM
+$outputPathCsv = "evaluation_report.csv"
+$fullPathCsv = (Get-Item .).FullName + "/" + $outputPathCsv
+$csvData | Export-Csv -Path $fullPathCsv -NoTypeInformation -Encoding UTF8
+
+Write-Host "[+] Markdown report generated at: $outputPathMd"
+Write-Host "[+] Excel CSV report generated at: $outputPathCsv"
