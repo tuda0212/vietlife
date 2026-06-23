@@ -3,6 +3,11 @@
 # This script is written in 100% ASCII to avoid encoding issues in Windows PowerShell.
 # All Vietnamese keywords and labels are loaded from keywords.json.
 
+param(
+    [string]$StartDate,
+    [string]$EndDate
+)
+
 $chatsFile = "pancake_chats_with_ads.json"
 $creativesFile = "ad_creatives.json"
 $keywordsFile = ".agents/skills/ad-insight-alignment/scripts/keywords.json"
@@ -23,6 +28,19 @@ if (-not (Test-Path $keywordsFile)) {
 # Ensure Output Encoding is UTF-8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
+# Parse Dates if provided
+$filterStart = $null
+$filterEnd = $null
+if ($StartDate) {
+    $filterStart = [DateTime]::ParseExact($StartDate, "yyyy-MM-dd", $null)
+    Write-Host "[*] Filtering chats starting from: $StartDate" -ForegroundColor Yellow
+}
+if ($EndDate) {
+    # Set to end of day
+    $filterEnd = [DateTime]::ParseExact($EndDate, "yyyy-MM-dd", $null).AddDays(1).AddTicks(-1)
+    Write-Host "[*] Filtering chats up to: $EndDate" -ForegroundColor Yellow
+}
+
 # Load Data
 $chatsData = Get-Content -Raw -Path $chatsFile -Encoding UTF8 | ConvertFrom-Json
 $creativesData = Get-Content -Raw -Path $creativesFile -Encoding UTF8 | ConvertFrom-Json
@@ -41,11 +59,28 @@ $l = $k.labels
 
 # Analyze
 $adStats = @{}
+$includedChatsCount = 0
 
 foreach ($chat in $chats) {
     if ($null -eq $chat.ads -or $chat.ads.Count -eq 0) {
         continue
     }
+
+    # Time Filter Check
+    $chatDateStr = $chat.inserted_at
+    if ($null -eq $chatDateStr) { $chatDateStr = $chat.updated_at }
+    
+    if ($chatDateStr) {
+        $chatDate = [DateTime]::Parse($chatDateStr)
+        if ($null -ne $filterStart -and $chatDate -lt $filterStart) {
+            continue
+        }
+        if ($null -ne $filterEnd -and $chatDate -gt $filterEnd) {
+            continue
+        }
+    }
+    
+    $includedChatsCount += 1
 
     foreach ($ad in $chat.ads) {
         $adId = $ad.ad_id
@@ -130,8 +165,12 @@ $timeStr = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 $lineTime = "{0}: {1}" -f $l.timeAnalyzed, $timeStr
 [void]$report.AppendLine($lineTime)
 
-$lineTotalChats = "{0}: {1}" -f $l.totalChatsAnalyzed, $chats.Count
+$lineTotalChats = "{0}: {1} (Filtered: {2})" -f $l.totalChatsAnalyzed, $chats.Count, $includedChatsCount
 [void]$report.AppendLine($lineTotalChats)
+
+if ($StartDate -or $EndDate) {
+    [void]$report.AppendLine("Khoang thoi gian loc: $StartDate -> $EndDate")
+}
 [void]$report.AppendLine()
 
 [void]$report.AppendLine($l.section1Title)
@@ -143,7 +182,7 @@ $lineTotalChats = "{0}: {1}" -f $l.totalChatsAnalyzed, $chats.Count
 $sortedStats = $adStats.Values | Sort-Object TotalChats -Descending
 
 foreach ($stats in $sortedStats) {
-    if ($stats.TotalChats -lt 5) { continue }
+    if ($stats.TotalChats -lt 1) { continue } # Show all active ads in this period
     
     $phoneRate = ($stats.PhoneLeads / $stats.TotalChats) * 100
     $bookingRate = ($stats.Bookings / $stats.TotalChats) * 100
@@ -160,7 +199,7 @@ foreach ($stats in $sortedStats) {
 [void]$report.AppendLine("|---|---|---|---|---|---|---|")
 
 foreach ($stats in $sortedStats) {
-    if ($stats.TotalChats -lt 5) { continue }
+    if ($stats.TotalChats -lt 1) { continue }
     
     $sympRate = ($stats.PainSymptoms / $stats.TotalChats) * 100
     $costRate = ($stats.PainCost / $stats.TotalChats) * 100
@@ -178,7 +217,7 @@ foreach ($stats in $sortedStats) {
 [void]$report.AppendLine()
 
 foreach ($stats in $sortedStats) {
-    if ($stats.TotalChats -lt 5) { continue }
+    if ($stats.TotalChats -lt 1) { continue }
     
     $adId = $stats.AdId
     $creative = $creativesData.$adId

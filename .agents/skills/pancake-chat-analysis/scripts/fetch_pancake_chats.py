@@ -3,7 +3,7 @@
 
 """
 Script kết nối Pancake Chat API để tải hội thoại và lịch sử tin nhắn.
-Hỗ trợ chạy qua tham số CLI hoặc biến môi trường.
+Hỗ trợ chạy qua tham số CLI hoặc biến môi trường, có hỗ trợ lọc khoảng thời gian.
 """
 
 import os
@@ -15,6 +15,25 @@ import requests
 from datetime import datetime
 
 PANCAKE_API_BASE = "https://pages.fm/api/public_api/v1"
+
+def date_to_timestamp(date_str):
+    if not date_str:
+        return None
+    try:
+        # Thử định dạng YYYY-MM-DD
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        return int(dt.timestamp())
+    except ValueError:
+        try:
+            # Thử định dạng YYYY-MM-DD HH:MM:SS
+            dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+            return int(dt.timestamp())
+        except ValueError:
+            try:
+                # Thử chuyển đổi trực tiếp nếu là số timestamp
+                return int(date_str)
+            except ValueError:
+                return None
 
 def fetch_conversations(page_id, token, limit=20, page=1, since=None, until=None):
     now = int(time.time())
@@ -37,6 +56,7 @@ def fetch_conversations(page_id, token, limit=20, page=1, since=None, until=None
     }
 
     print(f"[*] Đang tải danh sách hội thoại từ Pancake: Trang {page}, Giới hạn {limit}...")
+    print(f"[*] Bộ lọc thời gian (timestamp): since={since} ($(datetime.fromtimestamp(since))), until={until} ($(datetime.fromtimestamp(until)))")
     try:
         response = requests.get(url, params=params, timeout=15)
         if response.status_code == 200:
@@ -117,6 +137,8 @@ def main():
     parser.add_argument("--limit", type=int, default=10, help="Số lượng hội thoại cần lấy")
     parser.add_argument("--output", help="Đường dẫn lưu file JSON kết quả")
     parser.add_argument("--dummy", action="store_true", help="Chạy chế độ tạo dữ liệu mẫu giả lập")
+    parser.add_argument("--since", help="Thời gian bắt đầu (YYYY-MM-DD hoặc Unix timestamp)")
+    parser.add_argument("--until", help="Thời gian kết thúc (YYYY-MM-DD hoặc Unix timestamp)")
 
     args = parser.parse_args()
 
@@ -128,6 +150,10 @@ def main():
     if not output_path:
         output_path = f"pancake_chats_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
+    # Xử lý thời gian lọc
+    since_ts = date_to_timestamp(args.since)
+    until_ts = date_to_timestamp(args.until)
+
     # Nếu chọn chế độ giả lập hoặc thiếu thông tin thật
     if args.dummy or not page_id or not token or "YOUR_PAGE_ID" in page_id:
         print("[!] Không tìm thấy cấu hình Pancake Page ID hoặc Token thật. Chuyển sang sinh dữ liệu giả lập để thử nghiệm...")
@@ -135,7 +161,7 @@ def main():
         return
 
     # Tiến hành tải dữ liệu thật
-    conversations = fetch_conversations(page_id, token, limit=args.limit)
+    conversations = fetch_conversations(page_id, token, limit=args.limit, since=since_ts, until=until_ts)
     if not conversations:
         print("[!] Không lấy được cuộc trò chuyện nào từ API. Chuyển sang sinh dữ liệu giả lập để dự phòng...")
         save_dummy_data(output_path)
