@@ -24,25 +24,28 @@ Thư mục này chứa tài liệu và mã nguồn mẫu phục vụ cho mục t
 
 Để bắt đầu triển khai, bạn hãy tham khảo các tài liệu và công cụ dưới đây theo thứ tự:
 
-1. 📖 **[Hướng Dẫn Tích Hợp Pancake Chat API (pancake_api_guide.md)](file:///C:/Users/Anh%20Tu/.gemini/antigravity/worktrees/Vietlife/pancake-chat-analysis-learn/learn/pancake_api_guide.md)**
+1. 📖 **[Hướng Dẫn Tích Hợp Pancake Chat API (pancake_api_guide.md)](pancake_api_guide.md)**
    * Hướng dẫn chi tiết cách lấy User Access Token, Page Access Token từ giao diện Pancake.
    * Chi tiết cấu trúc các endpoint `GET` lấy danh sách trang, cuộc trò chuyện, lịch sử tin nhắn và cấu hình Webhook thời gian thực.
 
-2. 🐍 **[Script Cào Dữ Liệu Chat Mẫu (fetch_chats_sample.py)](file:///C:/Users/Anh%20Tu/.gemini/antigravity/worktrees/Vietlife/pancake-chat-analysis-learn/learn/fetch_chats_sample.py)**
+2. 🐍 **[Script Cào Dữ Liệu Chat Mẫu (fetch_chats_sample.py)](fetch_chats_sample.py)**
    * Script Python mẫu sử dụng thư viện `requests` để tự động hóa việc gọi API Pancake, xử lý phân trang, quản lý rate limit và lưu dữ liệu thành file JSON.
    * Chế độ giả lập tự sinh tệp `pancake_chats_dummy.json` để bạn thử nghiệm quy trình phân tích ngay cả khi chưa có token thật.
 
-3. 🤖 **[Prompts Phân Tích Với AI (chat_analysis_prompt.md)](file:///C:/Users/Anh%20Tu/.gemini/antigravity/worktrees/Vietlife/pancake-chat-analysis-learn/learn/chat_analysis_prompt.md)**
+3. 🤖 **[Prompts Phân Tích Với AI (chat_analysis_prompt.md)](chat_analysis_prompt.md)**
    * Bộ khung System Prompts chuyên sâu được tối ưu riêng cho LLM (Gemini, GPT) để thực hiện:
      * *Phân tích Chân dung khách hàng.*
      * *Phát hiện điểm nghẽn tư vấn.*
      * *Viết lại kịch bản phản hồi xử lý từ chối.*
      * *Đề xuất thông điệp & target tối ưu Facebook Ads.*
 
-4. 📊 **[Báo Cáo Phân Tích Thực Tế Bình An Nano (pancake_chat_analysis_report.md)](file:///C:/Users/Anh%20Tu/.gemini/antigravity/worktrees/Vietlife/pancake-chat-analysis-learn/learn/pancake_chat_analysis_report.md)**
+4. 📊 **[Báo Cáo Phân Tích Thực Tế Bình An Nano (pancake_chat_analysis_report.md)](pancake_chat_analysis_report.md)**
    * Báo cáo phân tích chi tiết dựa trên dữ liệu thật của 200 cuộc hội thoại vừa tải về.
    * Chỉ rõ các lỗi thực tế trong kịch bản cũ (Spam bot tự động, lặp câu hỏi, báo giá quá sớm).
    * Đề xuất kịch bản tư vấn mới tối ưu chuyển đổi và định hướng quảng cáo Facebook Ads thực chiến.
+
+5. 📢 **[Hướng Dẫn Facebook Ads & Commerce Platform (facebook_ads_commerce_guide.md)](facebook_ads_commerce_guide.md)**
+   * Hướng dẫn chi tiết cách tích hợp Marketing API (tạo chiến dịch, ad set, ad creative, ad), Ads Insights API, Commerce Manager (Product Catalog, Product Feeds) và Conversions API.
 
 ---
 
@@ -60,7 +63,7 @@ Thư mục này chứa tài liệu và mã nguồn mẫu phục vụ cho mục t
 
 2. **Bước 2: Phân tích dữ liệu bằng LLM**
    * Sao chép nội dung file JSON thu được.
-   * Truy cập các công cụ AI (Gemini hoặc ChatGPT) và sử dụng các prompt trong tệp **[chat_analysis_prompt.md](file:///C:/Users/Anh%20Tu/.gemini/antigravity/worktrees/Vietlife/pancake-chat-analysis-learn/learn/chat_analysis_prompt.md)** để trích xuất báo cáo phân tích.
+   * Truy cập các công cụ AI (Gemini hoặc ChatGPT) và sử dụng các prompt trong tệp **[chat_analysis_prompt.md](chat_analysis_prompt.md)** để trích xuất báo cáo phân tích.
 
 3. **Bước 3: Thử nghiệm thực tế & Đo lường**
    * Đào tạo đội ngũ tư vấn viên trực page áp dụng kịch bản xử lý từ chối mới.
