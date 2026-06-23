@@ -11,13 +11,13 @@ def main():
     query = f"""
         SELECT account_id, COUNT(*) as cnt
         FROM `{project_id}.{dataset_id}.fb_ad_insights`
-        WHERE LOWER(doctor_name) LIKE '%phạm duy%' 
-           OR LOWER(campaign_name) LIKE '%phạm duy%'
-           OR LOWER(campaign_name) LIKE '%pham duy%'
+        WHERE LOWER(doctor_name) LIKE '%định%' 
+           OR LOWER(campaign_name) LIKE '%định%'
+           OR LOWER(campaign_name) LIKE '%dinh%'
         GROUP BY account_id
     """
     
-    print("Running query...")
+    print("Running query for Dr Dinh...")
     query_job = client.query(query)
     results = list(query_job.result())
     print(f"Found {len(results)} accounts.")
