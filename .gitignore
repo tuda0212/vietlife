@@ -104,3 +104,5 @@ output/
 # Pancake Page Configurations containing real API keys
 .agents/skills/ad-insight-alignment/scripts/pages_config.json
 
+
+gcloud_sdk.zip
