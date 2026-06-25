@@ -1,0 +1,37 @@
+{
+  "BS_Khanh": {
+    "doctor_name": "Bác Sĩ Khánh Đại Trực Tràng",
+    "page_id": "112530851637050",
+    "pancake_token": "YOUR_PANCAKE_TOKEN_HERE"
+  },
+  "BS_Tuyen": {
+    "doctor_name": "Bác Sĩ Tuyên",
+    "page_id": "349024858299772",
+    "pancake_token": "YOUR_PANCAKE_TOKEN_HERE"
+  },
+  "BS_Duy": {
+    "doctor_name": "TS.BS Phạm Duy",
+    "page_id": "100785629454242",
+    "pancake_token": "YOUR_PANCAKE_TOKEN_HERE"
+  },
+  "BS_Dinh": {
+    "doctor_name": "Bác sĩ CKII Vương Hữu Định",
+    "page_id": "103466628428485",
+    "pancake_token": "YOUR_PANCAKE_TOKEN_HERE"
+  },
+  "BS_Hung": {
+    "doctor_name": "GS.TS.Bác Sĩ Kiều Đình Hùng",
+    "page_id": "204170409452487",
+    "pancake_token": "YOUR_PANCAKE_TOKEN_HERE"
+  },
+  "BS_KimChung": {
+    "doctor_name": "Bác Sĩ CK Thần Kinh Vietlife (Bs Kim Chung)",
+    "page_id": "510633135476819",
+    "pancake_token": "YOUR_PANCAKE_TOKEN_HERE"
+  },
+  "BS_VuAnh": {
+    "doctor_name": "ThS. Bác Sĩ Đỗ Vũ Anh - Chuyên khoa Chấn Thương Chỉnh Hình",
+    "page_id": "374037972794866",
+    "pancake_token": "YOUR_PANCAKE_TOKEN_HERE"
+  }
+}
