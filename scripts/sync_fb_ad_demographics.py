@@ -45,13 +45,15 @@ logger = logging.getLogger("sync_fb_ad_demographics")
 def main():
     logger.info("=== BẮT ĐẦU ĐỒNG BỘ DỮ LIỆU NHÂN KHẨU HỌC FACEBOOK ADS ===")
     
-    # 6 tài khoản Facebook Ads đã được định nghĩa trong config.py
-    account_ids = list(AD_ACCOUNTS.keys())
-    
-    # Cho phép chỉ định start_date và end_date qua tham số dòng lệnh
-    # Mặc định: Lấy dữ liệu từ 2025-01-01 đến hôm nay
+    # Cho phép chỉ định start_date, end_date và account_id cụ thể qua dòng lệnh
     start_date = sys.argv[1] if len(sys.argv) > 1 else "2025-01-01"
     end_date = sys.argv[2] if len(sys.argv) > 2 else date.today().strftime("%Y-%m-%d")
+    
+    target_account = sys.argv[3] if len(sys.argv) > 3 else None
+    if target_account:
+        account_ids = [target_account]
+    else:
+        account_ids = list(AD_ACCOUNTS.keys())
     
     logger.info(f"Thời gian đồng bộ: {start_date} → {end_date}")
     logger.info(f"Tổng số tài khoản: {len(account_ids)} ({', '.join(account_ids)})")
