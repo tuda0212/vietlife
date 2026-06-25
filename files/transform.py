@@ -47,31 +47,32 @@ def transform(
             continue
 
         campaign_name = item.get("campaign_name") or ""
-        parsed        = parse_campaign_name(campaign_name)
+        parsed = parse_campaign_name(campaign_name)
 
         # Ưu tiên mã CK từ campaign name, fallback sang account map
-        account_id     = item.get("_account_id", "")
-        specialty_code = parsed["specialty_code"] or account_specialty_map.get(account_id, "")
+        account_id = item.get("_account_id", "")
+        specialty_code = parsed["specialty_code"] or account_specialty_map.get(
+            account_id, "")
         specialty_name = SPECIALTY_NAMES.get(specialty_code, specialty_code)
-        doctor_name    = parsed["doctor_name"]
+        doctor_name = parsed["doctor_name"]
 
         # Creative / Status
-        details        = ad_details.get(ad_id) or {}
-        creative       = details.get("creative") or {}
-        status         = details.get("status") or ""
-        eff_status     = details.get("effective_status") or ""
-        is_active      = (status == "ACTIVE" and eff_status == "ACTIVE")
+        details = ad_details.get(ad_id) or {}
+        creative = details.get("creative") or {}
+        status = details.get("status") or ""
+        eff_status = details.get("effective_status") or ""
+        is_active = (status == "ACTIVE" and eff_status == "ACTIVE")
 
-        post_id        = get_post_id(creative, item.get("ad_name") or "")
-        post_link      = f"https://facebook.com/{post_id}" if post_id else ""
-        
+        post_id = get_post_id(creative, item.get("ad_name") or "")
+        post_link = f"https://facebook.com/{post_id}" if post_id else ""
+
         # Ưu tiên lấy URL đã được lưu trên GCS, fallback về get_thumbnail_url gốc
         if gcs_thumbnail_map and ad_id in gcs_thumbnail_map:
             thumbnail_url = gcs_thumbnail_map[ad_id]
         else:
             thumbnail_url = get_thumbnail_url(creative)
-            
-        content        = get_creative_text(creative)
+
+        content = get_creative_text(creative)
 
         # Actions
         actions = item.get("actions") or []
@@ -115,7 +116,8 @@ def transform(
             "thruplay":         get_video_metric(item.get("video_thruplay_watched_actions")),
         })
 
-    logger.info(f"[Transform] {len(insights)} insights → {len(rows)} dòng hợp lệ")
+    logger.info(
+        f"[Transform] {len(insights)} insights → {len(rows)} dòng hợp lệ")
     return rows
 
 
@@ -141,12 +143,13 @@ def transform_demographics(
             continue
 
         campaign_name = item.get("campaign_name") or ""
-        parsed        = parse_campaign_name(campaign_name)
+        parsed = parse_campaign_name(campaign_name)
 
-        account_id     = item.get("_account_id", "")
-        specialty_code = parsed["specialty_code"] or account_specialty_map.get(account_id, "")
+        account_id = item.get("_account_id", "")
+        specialty_code = parsed["specialty_code"] or account_specialty_map.get(
+            account_id, "")
         specialty_name = SPECIALTY_NAMES.get(specialty_code, specialty_code)
-        doctor_name    = parsed["doctor_name"]
+        doctor_name = parsed["doctor_name"]
 
         # Actions (Tin nhắn)
         actions = item.get("actions") or []

@@ -26,15 +26,16 @@ logger = logging.getLogger(__name__)
 def _split_date_range(start_str: str, end_str: str, chunk_days: int = 30) -> list[tuple[str, str]]:
     try:
         start = datetime.strptime(start_str, "%Y-%m-%d")
-        end   = datetime.strptime(end_str, "%Y-%m-%d")
+        end = datetime.strptime(end_str, "%Y-%m-%d")
     except Exception:
         return [(start_str, end_str)]
-    
+
     chunks = []
     curr = start
     while curr <= end:
         chunk_end = min(curr + timedelta(days=chunk_days - 1), end)
-        chunks.append((curr.strftime("%Y-%m-%d"), chunk_end.strftime("%Y-%m-%d")))
+        chunks.append((curr.strftime("%Y-%m-%d"),
+                      chunk_end.strftime("%Y-%m-%d")))
         curr += timedelta(days=chunk_days)
     return chunks
 
@@ -51,10 +52,11 @@ def fetch_insights(account_id: str, start_date: str, end_date: str) -> list[dict
     """
     fields = ",".join(INSIGHTS_FIELDS)
     all_rows = []
-    
+
     # Chia khoảng ngày lớn thành các chunk 30 ngày để tránh lỗi Facebook API Code 1 Subcode 99
     chunks = _split_date_range(start_date, end_date, chunk_days=30)
-    logger.info(f"[FB Insights] {account_id}: Chia {start_date} -> {end_date} thành {len(chunks)} chunks để query.")
+    logger.info(
+        f"[FB Insights] {account_id}: Chia {start_date} -> {end_date} thành {len(chunks)} chunks để query.")
 
     for sub_start, sub_end in chunks:
         time_range = f'{{"since":"{sub_start}","until":"{sub_end}"}}'
@@ -75,7 +77,8 @@ def fetch_insights(account_id: str, start_date: str, end_date: str) -> list[dict
             data = resp.json()
 
             if "error" in data:
-                raise RuntimeError(f"[FB Insights] {account_id} ({sub_start}->{sub_end}): {data['error']['message']}")
+                raise RuntimeError(
+                    f"[FB Insights] {account_id} ({sub_start}->{sub_end}): {data['error']['message']}")
 
             for row in data.get("data", []):
                 row["_account_id"] = account_id
@@ -84,12 +87,13 @@ def fetch_insights(account_id: str, start_date: str, end_date: str) -> list[dict
                     chunk_rows_count += 1
 
             url = data.get("paging", {}).get("next")
-            
-        logger.info(f"[FB Insights] {account_id} ({sub_start} -> {sub_end}): Lấy được {chunk_rows_count} dòng (spend > 0)")
 
-    logger.info(f"[FB Insights] {account_id} TỔNG CỘNG: {len(all_rows)} dòng (spend > 0)")
+        logger.info(
+            f"[FB Insights] {account_id} ({sub_start} -> {sub_end}): Lấy được {chunk_rows_count} dòng (spend > 0)")
+
+    logger.info(
+        f"[FB Insights] {account_id} TỔNG CỘNG: {len(all_rows)} dòng (spend > 0)")
     return all_rows
-
 
 
 def fetch_all_accounts(
@@ -103,7 +107,8 @@ def fetch_all_accounts(
             all_insights.extend(rows)
         except Exception as exc:
             logger.error(f"[FB Insights] Lỗi account {account_id}: {exc}")
-    logger.info(f"[FB Insights] Tổng: {len(all_insights)} dòng từ {len(account_ids)} account")
+    logger.info(
+        f"[FB Insights] Tổng: {len(all_insights)} dòng từ {len(account_ids)} account")
     return all_insights
 
 
@@ -140,8 +145,10 @@ def fetch_ad_details(ad_ids: list[str], max_workers: int = 10) -> dict:
     if not ad_ids:
         return {}
 
-    batches = [ad_ids[i:i + FB_BATCH_SIZE] for i in range(0, len(ad_ids), FB_BATCH_SIZE)]
-    logger.info(f"[FB Details] {len(ad_ids)} ad → {len(batches)} batch (song song {max_workers} luồng)")
+    batches = [ad_ids[i:i + FB_BATCH_SIZE]
+               for i in range(0, len(ad_ids), FB_BATCH_SIZE)]
+    logger.info(
+        f"[FB Details] {len(ad_ids)} ad → {len(batches)} batch (song song {max_workers} luồng)")
 
     result = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -291,9 +298,10 @@ def fetch_demographics_insights(account_id: str, start_date: str, end_date: str,
     """
     fields = "ad_id,ad_name,campaign_name,date_start,date_stop,spend,impressions,clicks,reach,actions"
     all_rows = []
-    
+
     chunks = _split_date_range(start_date, end_date, chunk_days=30)
-    logger.info(f"[FB Demographics] {account_id} ({breakdowns}): Chia {start_date} -> {end_date} thành {len(chunks)} chunks.")
+    logger.info(
+        f"[FB Demographics] {account_id} ({breakdowns}): Chia {start_date} -> {end_date} thành {len(chunks)} chunks.")
 
     for sub_start, sub_end in chunks:
         time_range = f'{{"since":"{sub_start}","until":"{sub_end}"}}'
@@ -315,7 +323,8 @@ def fetch_demographics_insights(account_id: str, start_date: str, end_date: str,
             data = resp.json()
 
             if "error" in data:
-                raise RuntimeError(f"[FB Demographics] {account_id} ({breakdowns}) ({sub_start}->{sub_end}): {data['error']['message']}")
+                raise RuntimeError(
+                    f"[FB Demographics] {account_id} ({breakdowns}) ({sub_start}->{sub_end}): {data['error']['message']}")
 
             for row in data.get("data", []):
                 row["_account_id"] = account_id
@@ -324,6 +333,7 @@ def fetch_demographics_insights(account_id: str, start_date: str, end_date: str,
                     chunk_rows_count += 1
 
             url = data.get("paging", {}).get("next")
-            
-    logger.info(f"[FB Demographics] {account_id} ({breakdowns}) TỔNG CỘNG: {len(all_rows)} dòng (spend > 0)")
+
+    logger.info(
+        f"[FB Demographics] {account_id} ({breakdowns}) TỔNG CỘNG: {len(all_rows)} dòng (spend > 0)")
     return all_rows
