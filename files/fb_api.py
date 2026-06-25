@@ -282,3 +282,48 @@ def remove_vietnamese_tone(text: str) -> str:
     text = unicodedata.normalize("NFD", str(text or ""))
     text = "".join(c for c in text if unicodedata.category(c) != "Mn")
     return text.replace("đ", "d").replace("Đ", "D").lower()
+
+
+def fetch_demographics_insights(account_id: str, start_date: str, end_date: str, breakdowns: str) -> list[dict]:
+    """
+    Lấy insights theo breakdowns (vd: 'age,gender' hoặc 'region').
+    Chỉ lấy các trường cơ bản liên quan nhân khẩu học để tối ưu tải và tránh timeout.
+    """
+    fields = "ad_id,ad_name,campaign_name,date_start,date_stop,spend,impressions,clicks,reach,actions"
+    all_rows = []
+    
+    chunks = _split_date_range(start_date, end_date, chunk_days=30)
+    logger.info(f"[FB Demographics] {account_id} ({breakdowns}): Chia {start_date} -> {end_date} thành {len(chunks)} chunks.")
+
+    for sub_start, sub_end in chunks:
+        time_range = f'{{"since":"{sub_start}","until":"{sub_end}"}}'
+        url = (
+            f"{FB_API_BASE}/{account_id}/insights"
+            f"?level=ad"
+            f"&time_range={requests.utils.quote(time_range)}"
+            f"&time_increment=1"
+            f"&fields={fields}"
+            f"&breakdowns={breakdowns}"
+            f"&limit=500"
+            f"&access_token={FB_ACCESS_TOKEN}"
+        )
+
+        chunk_rows_count = 0
+        while url:
+            resp = requests.get(url, timeout=60)
+            resp.raise_for_status()
+            data = resp.json()
+
+            if "error" in data:
+                raise RuntimeError(f"[FB Demographics] {account_id} ({breakdowns}) ({sub_start}->{sub_end}): {data['error']['message']}")
+
+            for row in data.get("data", []):
+                row["_account_id"] = account_id
+                if float(row.get("spend") or 0) > 0:
+                    all_rows.append(row)
+                    chunk_rows_count += 1
+
+            url = data.get("paging", {}).get("next")
+            
+    logger.info(f"[FB Demographics] {account_id} ({breakdowns}) TỔNG CỘNG: {len(all_rows)} dòng (spend > 0)")
+    return all_rows

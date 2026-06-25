@@ -10,9 +10,9 @@ import logging
 from datetime import date, timedelta
 
 from config import AD_ACCOUNTS, DEFAULT_LOOKBACK_DAYS, GCS_BUCKET_NAME
-from fb_api import fetch_all_accounts, fetch_ad_details, normalize_ad_id
-from transform import transform
-from bq_loader import upsert_rows
+from fb_api import fetch_all_accounts, fetch_ad_details, normalize_ad_id, fetch_demographics_insights
+from transform import transform, transform_demographics
+from bq_loader import upsert_rows, upsert_demographics_rows
 from gcs_helper import upload_thumbnails_to_gcs_batch
 
 logger = logging.getLogger(__name__)
@@ -105,7 +105,32 @@ def run(
         account_ids = list(active_accounts.keys()),
     )
 
-    logger.info(f"[Pipeline] HOÀN TẤT — đã insert {inserted} dòng.")
+    # --- B5: Xử lý Nhân khẩu học & Địa lý độc lập ---
+    logger.info("[B5] Xử lý dữ liệu Nhân khẩu học...")
+    demo_rows = []
+    
+    for account_id in active_accounts.keys():
+        try:
+            # Lấy và transform Age/Gender
+            raw_age_gender = fetch_demographics_insights(account_id, start_str, end_str, "age,gender")
+            demo_rows.extend(transform_demographics(raw_age_gender, active_accounts, "age_gender", run_str))
+            
+            # Lấy và transform Region
+            raw_region = fetch_demographics_insights(account_id, start_str, end_str, "region")
+            demo_rows.extend(transform_demographics(raw_region, active_accounts, "region", run_str))
+            
+        except Exception as demo_err:
+            logger.error(f"[B5] Lỗi lấy demographics cho {account_id}: {demo_err}")
+
+    inserted_demo = 0
+    if demo_rows:
+        logger.info(f"[B5] Insert {len(demo_rows)} dòng demographics vào BigQuery...")
+        try:
+            inserted_demo = upsert_demographics_rows(demo_rows, start_str, end_str, list(active_accounts.keys()))
+        except Exception as bq_demo_err:
+            logger.error(f"[B5] Lỗi insert demographics vào BigQuery: {bq_demo_err}")
+
+    logger.info(f"[Pipeline] HOÀN TẤT — đã insert {inserted} dòng chính và {inserted_demo} dòng nhân khẩu học.")
     logger.info("=" * 60)
 
     return {
@@ -116,4 +141,5 @@ def run(
         "insights_count": len(all_insights),
         "ads_fetched":    len(ad_details),
         "inserted_rows":  inserted,
+        "inserted_demographics_rows": inserted_demo,
     }

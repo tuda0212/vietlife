@@ -117,3 +117,70 @@ def transform(
 
     logger.info(f"[Transform] {len(insights)} insights → {len(rows)} dòng hợp lệ")
     return rows
+
+
+def transform_demographics(
+    insights: list[dict],
+    account_specialty_map: dict,  # { "act_xxx": "CXK" }
+    breakdown_type: str,          # "age_gender" hoặc "region"
+    run_date: str,
+) -> list[dict]:
+    """
+    Biến đổi raw insights có breakdowns -> rows sạch cho bảng demographics.
+    """
+    now_utc = datetime.now(timezone.utc).isoformat()
+    rows = []
+
+    for item in insights:
+        ad_id = normalize_ad_id(item.get("ad_id"))
+        if not ad_id:
+            continue
+
+        spend = float(item.get("spend") or 0)
+        if spend <= 0:
+            continue
+
+        campaign_name = item.get("campaign_name") or ""
+        parsed        = parse_campaign_name(campaign_name)
+
+        account_id     = item.get("_account_id", "")
+        specialty_code = parsed["specialty_code"] or account_specialty_map.get(account_id, "")
+        specialty_name = SPECIALTY_NAMES.get(specialty_code, specialty_code)
+        doctor_name    = parsed["doctor_name"]
+
+        # Actions (Tin nhắn)
+        actions = item.get("actions") or []
+        mes = get_action_value(actions, [
+            "messaging_first_reply",
+            "onsite_conversion.messaging_first_reply",
+        ])
+
+        # Đọc thông tin phân rã nhân khẩu
+        age = item.get("age") if breakdown_type == "age_gender" else None
+        gender = item.get("gender") if breakdown_type == "age_gender" else None
+        region = item.get("region") if breakdown_type == "region" else None
+
+        rows.append({
+            "inserted_at":      now_utc,
+            "run_date":         run_date,
+            "start_date":       item.get("date_start"),
+            "end_date":         item.get("date_stop"),
+            "account_id":       account_id,
+            "ad_id":            ad_id,
+            "ad_name":          item.get("ad_name") or "",
+            "campaign_name":    campaign_name,
+            "specialty_code":   specialty_code,
+            "specialty_name":   specialty_name,
+            "doctor_name":      doctor_name,
+            "spend":            spend,
+            "clicks":           int(item.get("clicks") or 0),
+            "impressions":      int(item.get("impressions") or 0),
+            "reach":            int(item.get("reach") or 0),
+            "mes":              mes,
+            "breakdown_type":   breakdown_type,
+            "age":              age,
+            "gender":           gender,
+            "region":           region,
+        })
+
+    return rows
