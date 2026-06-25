@@ -92,7 +92,12 @@ def clean_phone_for_display(val):
         return val_str
     if digits.startswith("0"):
         digits = digits[1:]
-    return digits
+    if digits:
+        try:
+            return int(digits)
+        except ValueError:
+            return digits
+    return val_str
 
 def standardize_doctor(val, ds_bac_si):
     if not val:
@@ -102,6 +107,153 @@ def standardize_doctor(val, ds_bac_si):
         if name.lower() in val_str:
             return name
     return ""
+
+DOC_REGIONS = {
+    # Miền Bắc (MB)
+    "Đinh Trọng Tuyên": "MB",
+    "Trần Sơn Tùng": "MB",
+    "Nguyễn Lê Bảo Tiến": "MB",
+    "Vũ Xuân Phước": "MB",
+    "Ngô Mạnh Hùng": "MB",
+    "Phạm Duy": "MB",
+    "Đỗ Vũ Anh": "MB",
+    "Nguyễn Quốc Hùng": "MB",
+    "Nguyễn Mộc Sơn": "MB",
+    "Hoàng Ngọc Sơn": "MB",
+    "Đỗ Văn Hải": "MB",
+    "Nguyễn Xuân Trường": "MB",
+    "Đinh Thị Thủy Lan": "MB",
+    
+    # Miền Nam (MN)
+    "Tô Văn Quỳnh": "MN",
+    "TRẦN DẠ VƯƠNG": "MN",
+    "DƯƠNG THANH TÙNG": "MN",
+    "TRẦN LƯƠNG ANH": "MN",
+    "VƯƠNG HỮU ĐỊNH": "MN",
+    "HÀ VĂN TUẤN": "MN",
+    "HOÀNG KHẮC XUÂN": "MN",
+    "VÕ CHÂU DUYÊN": "MN",
+    "PHẠM THẾ VŨ": "MN",
+    "NGUYỄN MINH ĐỨC": "MN",
+    "NGUYỄN KIM CHUNG": "MN",
+    "NGUYỄN VĨNH KHANG": "MN",
+    "VÕ VĂN SƠN": "MN",
+    "NGUYỄN KIM NGÔI": "MN",
+    "VÕ ĐĂNG SƠN": "MN",
+    "NGÔ THỊ DIỆU MINH": "MN",
+    "Nguyễn Thi Hùng": "MN",
+    "Vũ Văn Cường": "MN",
+    
+    # Cả hai miền
+    "Kiều Đình Hùng": "BOTH"
+}
+
+def get_standardized_mkt_doctor(channel_val):
+    if not channel_val:
+        return ""
+    val_str = str(channel_val).strip().lower()
+    
+    # 1. Kiều Đình Hùng (BOTH)
+    if "kiều đình hùng" in val_str or "thầy hùng" in val_str or val_str == "thầy" or "ttcs - thầy" in val_str:
+        return "Kiều Đình Hùng"
+        
+    # 2. Đinh Trọng Tuyên (MB)
+    if "đinh trọng tuyên" in val_str or "tuyên" in val_str or val_str == "tuyền":
+        return "Đinh Trọng Tuyên"
+        
+    # 3. Nguyễn Lê Bảo Tiến (MB)
+    if "nguyễn lê bảo tiến" in val_str or "bảo tiến" in val_str or "bs tiến" in val_str:
+        return "Nguyễn Lê Bảo Tiến"
+        
+    # 4. Phạm Duy (MB)
+    if "phạm duy" in val_str or "bs duy" in val_str:
+        return "Phạm Duy"
+        
+    # 5. Võ Châu Duyên (MN)
+    if "võ châu duyên" in val_str or "châu duyên" in val_str:
+        return "VÕ CHÂU DUYÊN"
+        
+    # 6. Đỗ Vũ Anh (MB)
+    if "đỗ vũ anh" in val_str or "vũ anh" in val_str:
+        return "Đỗ Vũ Anh"
+        
+    # 7. Vũ Văn Cường (MN)
+    if "vũ văn cường" in val_str or "bs cường" in val_str or "cường" in val_str:
+        return "Vũ Văn Cường"
+        
+    # 8. Vương Hữu Định (MN)
+    if "vương hữu định" in val_str or "bs định" in val_str:
+        return "VƯƠNG HỮU ĐỊNH"
+        
+    # 9. Tô Văn Quỳnh (MN)
+    if "tô văn quỳnh" in val_str or "quỳnh" in val_str:
+        return "Tô Văn Quỳnh"
+        
+    # 10. Trần Dạ Vương (MN)
+    if "dạ vương" in val_str:
+        return "TRẦN DẠ VƯƠNG"
+        
+    # 11. Nguyễn Thi Hùng (MN)
+    if "thi hùng" in val_str:
+        return "Nguyễn Thi Hùng"
+        
+    # 12. Phạm Thế Vũ (MN)
+    if "thế vũ" in val_str:
+        return "PHẠM THẾ VŨ"
+        
+    # 13. Vũ Xuân Phước (MB)
+    if "xuân phước" in val_str:
+        return "Vũ Xuân Phước"
+        
+    # 14. Nguyễn Mộc Sơn (MB)
+    if "mộc sơn" in val_str:
+        return "Nguyễn Mộc Sơn"
+        
+    # 15. Ngô Mạnh Hùng (MB)
+    if "ngô mạnh hùng" in val_str:
+        return "Ngô Mạnh Hùng"
+        
+    return ""
+
+def get_lead_region(row, sheet_name):
+    sheet_lower = sheet_name.lower()
+    
+    # 1. Xác định cột địa chỉ/thành phố dựa trên tên sheet
+    city_indices = []
+    if "data cũ" in sheet_lower:
+        city_indices = [3] # Cột D
+    elif "data chung" in sheet_lower or "cột sống" in sheet_lower or "cxk" in sheet_lower or "thần kinh" in sheet_lower or "ttcs" in sheet_lower or "ttcxk" in sheet_lower or "tttk" in sheet_lower:
+        city_indices = [4] # Cột E
+    elif "data 2024" in sheet_lower or "data t1-t2" in sheet_lower:
+        city_indices = [6, 17] # Cột G (Địa chỉ) hoặc R (Khu vực)
+    elif "thầy" in sheet_lower:
+        city_indices = [4, 5] # Cột E (Địa chỉ) hoặc F (Khu vực)
+    elif "web" in sheet_lower:
+        city_indices = [3] # Cột D (your-subject - chứa địa chỉ)
+    elif "cđ" in sheet_lower:
+        city_indices = [9, 15] # Cột J (Nội dung chi tiết) hoặc P (Chi nhánh)
+    else:
+        city_indices = [3, 4, 5, 6] # Quét các cột phổ biến
+        
+    # 2. Kiểm tra xem có chứa từ khóa miền Nam trong các cột địa chỉ không
+    for idx in city_indices:
+        if len(row) > idx:
+            val_str = str(row[idx]).strip().lower()
+            if not val_str:
+                continue
+                
+            # Từ khóa miền Nam
+            for kw in ["hồ chí minh", "hcm", "sài gòn", "sg", "vũng tàu", "cần thơ", "đồng nai", "bình dương", "miền nam", "mn", "kiên giang", "long an", "an giang", "tiền giang", "sư vạn hạnh", "svh", "nct", "nguyễn chãi"]:
+                if kw in val_str:
+                    return "MN"
+                    
+            # Từ khóa miền Bắc
+            for kw in ["hà nội", "hn", "phùng", "đan phượng", "sơn tây", "trần bình trọng", "tbt", "lê thánh tông", "ltn", "miền bắc", "mb"]:
+                if kw in val_str:
+                    return "MB"
+                    
+    # Mặc định là MB nếu không tìm thấy từ khóa miền Nam
+    return "MB"
 
 def parse_date_only_str(val):
     if not val:
@@ -301,11 +453,15 @@ def build_lookup_map(sheet_api, spreadsheet_id):
                 source_val = row[config["source"]]
                 channel_val = row[config["channel"]]
                 
+                # Xác định vùng miền của lead (phương án dự phòng)
+                lead_region = get_lead_region(row, sheet_name_used)
+                
                 if phone_normalized not in lookup_map or row_time >= lookup_map[phone_normalized]["timestamp"]:
                     lookup_map[phone_normalized] = {
                         "source": source_val,
                         "channel": channel_val,
-                        "timestamp": row_time
+                        "timestamp": row_time,
+                        "lead_region": lead_region
                     }
                     
     print(f"✅ Đã dựng Lookup Map thành công với {len(lookup_map)} số điện thoại đối soát.")
@@ -357,27 +513,29 @@ def get_marketing_leads_for_week(sheet_api, config_ss_id, start_date, end_date, 
             row_dt = datetime.fromtimestamp(row_time)
             
             if start_date <= row_dt <= end_date:
-                # Phân loại vùng miền dựa trên cột thành phố (mặc định index 4, trừ DATA Cũ là index 3)
-                row_region = "MB"
-                city_col = 3 if sheet_name_used == "DATA Cũ" else 4
-                if len(row) > city_col:
-                    city_str = str(row[city_col]).strip().lower()
-                    for kw in ["hồ chí minh", "hcm", "sài gòn", "sg", "vũng tàu", "cần thơ", "đồng nai", "bình dương", "miền nam", "mn", "kiên giang", "long an", "an giang", "tiền giang"]:
-                        if kw in city_str:
-                            row_region = "MN"
-                            break
-                            
-                if row_region == region:
-                    phone_raw = str(row[config["phone"]]).strip()
-                    phone_digits = "".join(c for c in phone_raw if c.isdigit())
-                    if phone_digits.startswith("0"):
-                        phone_digits = phone_digits[1:]
-                        
+                phone_raw = str(row[config["phone"]]).strip()
+                phone_digits = "".join(c for c in phone_raw if c.isdigit())
+                if phone_digits.startswith("0"):
+                    phone_digits = phone_digits[1:]
+                    
+                if phone_digits:
                     source_val = row[config["source"]]
                     channel_val = row[config["channel"]]
                     
-                    if phone_digits:
-                        mkt_leads.append([phone_digits, source_val, channel_val])
+                    # Logic lọc vùng miền
+                    doc_std = get_standardized_mkt_doctor(channel_val)
+                    if doc_std:
+                        doc_region = DOC_REGIONS.get(doc_std)
+                        if doc_region and doc_region != "BOTH" and doc_region != region:
+                            # Bác sĩ thuộc vùng miền khác -> Bỏ qua
+                            continue
+                    else:
+                        # Fallback theo tỉnh thành
+                        lead_region = get_lead_region(row, sheet_name_used)
+                        if lead_region != region:
+                            continue
+                            
+                    mkt_leads.append([phone_digits, source_val, channel_val])
                         
     print(f"✅ Đã lọc được {len(mkt_leads)} Marketing leads cho miền {region}.")
     return mkt_leads
@@ -396,7 +554,8 @@ def reconcile_data(rows, lookup_map):
         "TRẦN DẠ VƯƠNG", "DƯƠNG THANH TÙNG", "TRẦN LƯƠNG ANH", "VƯƠNG HỮU ĐỊNH",
         "HÀ VĂN TUẤN", "HOÀNG KHẮC XUÂN", "VÕ CHÂU DUYÊN", "PHẠM THẾ VŨ",
         "NGUYỄN MINH ĐỨC", "NGUYỄN KIM CHUNG", "NGUYỄN VĨNH KHANG", "VÕ VĂN SƠN",
-        "NGUYỄN KIM NGÔI", "VÕ ĐĂNG SƠN", "NGÔ THỊ DIỆU MINH", "Nguyễn Xuân Trường", "Đinh Thị Thủy Lan"
+        "NGUYỄN KIM NGÔI", "VÕ ĐĂNG SƠN", "NGÔ THỊ DIỆU MINH", "Nguyễn Xuân Trường", "Đinh Thị Thủy Lan",
+        "Nguyễn Thi Hùng", "Vũ Văn Cường"
     ]
     
     allowed_docs_special = ["Đinh Trọng Tuyên", "Kiều Đình Hùng", "Đỗ Vũ Anh"]
@@ -594,13 +753,25 @@ def copy_template_and_rename(sheet_api, spreadsheet_id, template_sheet_id, new_t
     return copied_sheet_id
 
 def write_sheet_values(sheet_api, spreadsheet_id, sheet_title, rows):
+    formatted_rows = []
+    for row in rows:
+        formatted_row = []
+        for cell in row:
+            if cell is None or (isinstance(cell, float) and pd.isna(cell)):
+                formatted_row.append("")
+            elif isinstance(cell, (int, float)):
+                formatted_row.append(cell)
+            else:
+                formatted_row.append(str(cell))
+        formatted_rows.append(formatted_row)
+        
     body = {
-        "values": [[str(cell) if cell is not None else "" for cell in row] for row in rows]
+        "values": formatted_rows
     }
     sheet_api.values().update(
         spreadsheetId=spreadsheet_id,
         range=f"'{sheet_title}'!A2",  # Bắt đầu viết từ A2 để giữ nguyên hàng tiêu đề của Template
-        valueInputOption="RAW",
+        valueInputOption="USER_ENTERED",
         body=body
     ).execute()
 
@@ -881,6 +1052,21 @@ def main():
                 if phone_norm in lookup_map:
                     source_val = lookup_map[phone_norm]["source"]
                     channel_val = lookup_map[phone_norm]["channel"]
+                    
+                    # Logic phân loại và lọc theo vùng miền
+                    doc_std = get_standardized_mkt_doctor(channel_val)
+                    if doc_std:
+                        doc_region = DOC_REGIONS.get(doc_std)
+                        if doc_region and doc_region != "BOTH" and doc_region != region:
+                            # Bác sĩ thuộc miền khác, loại bỏ khỏi mkt_leads của miền hiện tại
+                            continue
+                    else:
+                        # Không có bác sĩ chỉ định cụ thể, fallback lọc theo tỉnh thành của lead
+                        lead_region = lookup_map[phone_norm].get("lead_region", "MB")
+                        if lead_region != region:
+                            # Lead thuộc miền khác, loại bỏ
+                            continue
+                            
                     mkt_leads.append([phone_norm, source_val, channel_val])
             
         # 4. Sao chép định dạng Template và ghi dữ liệu lên Google Sheet
