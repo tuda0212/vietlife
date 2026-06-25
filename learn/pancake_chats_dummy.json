@@ -1,0 +1,44 @@
+[
+  {
+    "conversation_id": "t.100063.98765",
+    "customer_name": "Nguyễn Thị Mai",
+    "customer_id": "98765",
+    "tags": [
+      "Khách Quan Tâm",
+      "Cần Gọi Lại"
+    ],
+    "updated_at": "2026-06-20T05:00:00Z",
+    "messages": [
+      {
+        "sender": "Nguyễn Thị Mai",
+        "content": "Dạ em chào anh/chị, em đang tìm hiểu về gói khám sức khỏe tổng quát cho mẹ em ạ.",
+        "created_at": "2026-06-20T04:50:00Z"
+      },
+      {
+        "sender": "Vietlife Clinic (Page)",
+        "content": "Chào bạn Mai, Vietlife rất vui được tư vấn cho bạn. Mẹ bạn năm nay bao nhiêu tuổi và có đang gặp triệu chứng gì bất thường không ạ?",
+        "created_at": "2026-06-20T04:52:00Z"
+      },
+      {
+        "sender": "Nguyễn Thị Mai",
+        "content": "Mẹ em năm nay 58 tuổi, dạo này hay kêu mệt, đau đầu với mất ngủ ạ. Không biết nên khám gói nào?",
+        "created_at": "2026-06-20T04:53:00Z"
+      },
+      {
+        "sender": "Vietlife Clinic (Page)",
+        "content": "Dạ với độ tuổi của bác và các dấu hiệu đau đầu, mất ngủ, Vietlife có gói khám Sức Khỏe Toàn Diện kèm tầm soát Tai Biến - Đột Quỵ rất phù hợp ạ. Gói này đang ưu đãi giảm 15% còn 3.500.000đ.",
+        "created_at": "2026-06-20T04:55:00Z"
+      },
+      {
+        "sender": "Nguyễn Thị Mai",
+        "content": "Giá 3.500.000đ là trọn gói chưa ạ? Có phát sinh thêm phí xét nghiệm gì không? Để em hỏi lại mẹ xem sao nhé.",
+        "created_at": "2026-06-20T04:57:00Z"
+      },
+      {
+        "sender": "Vietlife Clinic (Page)",
+        "content": "Dạ giá trên đã bao gồm toàn bộ danh mục khám lâm sàng, siêu âm, chụp MRI não mạch máu và xét nghiệm máu cơ bản rồi ạ. Bạn cứ trao đổi với bác rồi báo lại bên mình xếp lịch khám nhé!",
+        "created_at": "2026-06-20T04:59:00Z"
+      }
+    ]
+  }
+]

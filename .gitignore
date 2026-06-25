@@ -100,3 +100,7 @@ output/
 # =============================================================================
 # Giữ Dockerfile nhưng ignore build artifacts
 .dockerignore
+
+# Pancake Page Configurations containing real API keys
+.agents/skills/ad-insight-alignment/scripts/pages_config.json
+

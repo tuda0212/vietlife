@@ -42,7 +42,7 @@ def main():
     logger.info("=== BẮT ĐẦU ĐỒNG BỘ DỮ LIỆU FACEBOOK ADS ===")
     
     start_date = "2025-01-01"
-    end_date = "2026-06-18"
+    end_date = "2026-06-19"
     
     account_ids = [
         "act_696152742916012",
