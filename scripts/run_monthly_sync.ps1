@@ -1,8 +1,8 @@
-# run_monthly_sync.ps1 — Chạy đồng bộ demographics theo từng tháng để tránh Rate Limit Facebook API
+# run_monthly_sync.ps1 — Dong bo demographics theo tung thang de tranh Rate Limit
 
-Write-Host "=== BẮT ĐẦU ĐỒNG BỘ DEMOGRAPHICS LỊCH SỬ THEO THÁNG (2026) ===" -ForegroundColor Cyan
+Write-Host "=== BAT DAU DONG BO DEMOGRAPHICS LICH SU THEO THANG (2026) ===" -ForegroundColor Cyan
 
-# Danh sách các khoảng thời gian theo tháng
+# Danh sach cac khoang thoi gian theo thang
 $months = @(
     @{ Start = "2026-01-01"; End = "2026-01-31" },
     @{ Start = "2026-02-01"; End = "2026-02-28" },
@@ -13,12 +13,12 @@ $months = @(
 )
 
 foreach ($m in $months) {
-    Write-Host "`n>>> Đồng bộ khoảng thời gian: $($m.Start) -> $($m.End) <<<" -ForegroundColor Yellow
+    Write-Host "=== Dong bo thang: $($m.Start) den $($m.End) ===" -ForegroundColor Yellow
     python scripts/sync_fb_ad_demographics.py $m.Start $m.End
     
-    # Nghỉ 15 giây giữa các đợt chạy để reset Rate Limit của Facebook API
-    Write-Host "Chờ 15 giây trước khi tiếp tục đợt tiếp theo..." -ForegroundColor DarkGray
+    # Nghi 15 giay de Facebook API cooldown
+    Write-Host "Cho 15 giay truoc khi chay thang tiep theo..." -ForegroundColor DarkGray
     Start-Sleep -Seconds 15
 }
 
-Write-Host "`n=== ĐỒNG BỘ TOÀN BỘ HOÀN TẤT THÀNH CÔNG ===" -ForegroundColor Green
+Write-Host "=== DONG BO TOAN BO HOAN TAT ===" -ForegroundColor Green
