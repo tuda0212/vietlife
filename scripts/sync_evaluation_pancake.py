@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Script tổng hợp dữ liệu Facebook Ads (từ BigQuery) và Pancake Chats (gọi trực tiếp Pancake API)
+Script tổng hợp dữ liệu Facebook Ads (từ Facebook Marketing API) và Pancake Chats (gọi trực tiếp Pancake API)
 để ghi vào bảng ad_content_evaluation trong BigQuery.
 """
 
@@ -14,6 +14,7 @@ import logging
 import argparse
 import requests
 import re
+import unicodedata
 from pathlib import Path
 from datetime import datetime, date, timedelta
 from google.cloud import bigquery
@@ -30,19 +31,76 @@ logger = logging.getLogger("sync_evaluation_pancake")
 
 PANCAKE_API_BASE = "https://pages.fm/api/public_api/v1"
 
-# 1. Load biến môi trường từ file .env
+# Thêm thư mục 'files' vào sys.path để import pipeline components
 workspace_root = Path(__file__).resolve().parent.parent
+files_dir = os.path.join(workspace_root, "files")
+if files_dir not in sys.path:
+    sys.path.append(files_dir)
+
+# 1. Load biến môi trường từ file .env
+# Tìm file .env ở thư mục workspace_root, nếu không có thử tìm ở sync-facebook-ad-demographics hoặc path khác
 env_file = workspace_root / ".env"
+if not env_file.exists():
+    # Thử tìm ở thư mục sync-facebook-ad-demographics (nơi ta tìm thấy .env thật)
+    env_file = workspace_root.parent / "sync-facebook-ad-demographics" / ".env"
 if not env_file.exists():
     env_file = Path("/Users/daudau/VL/.env")
 
 if env_file.exists():
-    with open(env_file) as f:
+    logger.info(f"[*] Loading environment from: {env_file}")
+    with open(env_file, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
                 key, _, value = line.partition("=")
                 os.environ.setdefault(key.strip(), value.strip())
+
+# Sau khi load env, ta set GOOGLE_APPLICATION_CREDENTIALS nếu chưa có
+cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+if not cred_path or not os.path.exists(cred_path):
+    # Thử check file creds tìm thấy
+    potential_creds = [
+        workspace_root.parent / "refactor-hospital-reconciliation-logic" / "google-credentials.json",
+        workspace_root / "google-credentials.json"
+    ]
+    for p in potential_creds:
+        if p.exists():
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(p)
+            logger.info(f"[*] Set GOOGLE_APPLICATION_CREDENTIALS to: {p}")
+            break
+
+# Import Facebook Ads API helpers từ files
+from fb_api import fetch_all_accounts, fetch_ad_details, normalize_ad_id
+from transform import transform as transform_fb_ads
+from config import AD_ACCOUNTS
+
+def normalize_doctor_name(name):
+    if not name:
+        return "Unknown"
+    
+    # Chuẩn hóa chuỗi bằng cách bỏ dấu tiếng Việt và chuyển sang viết thường
+    def remove_accents(s):
+        s = unicodedata.normalize("NFD", s)
+        s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+        return s.replace("đ", "d").replace("Đ", "d").lower().strip()
+        
+    normalized_name = remove_accents(name)
+    
+    mapping = {
+        "dinh": "BS Định",
+        "tuyen": "BS Tuyên",
+        "duy": "BS Phạm Duy",
+        "chung": "BS Kim Chung",
+        "hung": "BS Kiều Đình Hùng",
+        "vu anh": "BS Vũ Anh",
+        "khanh": "BS Khánh"
+    }
+    
+    for key, val in mapping.items():
+        if key in normalized_name:
+            return val
+            
+    return name
 
 def date_to_timestamp(date_str, is_end=False):
     if not date_str:
@@ -100,25 +158,28 @@ def fetch_conversations(page_id, token, since_ts, until_ts, page=1, limit=100):
 def analyze_pancake_data(start_date, end_date, pages_config):
     """
     Gọi Pancake API để lấy và phân tích các cuộc hội thoại
-    Trả về: (pancake_stats, successful_pancake_doctors)
+    Trả về: pancake_stats
     """
     pancake_stats = {}
-    successful_pancake_doctors = set()
     
     # Chia khoảng thời gian thành các khoảng nhỏ dưới 15 ngày để tránh giới hạn API
     date_ranges = split_date_range(start_date, end_date, max_days=15)
     logger.info(f"[*] Khoảng thời gian {start_date} ➔ {end_date} được chia thành các khoảng nhỏ để gọi Pancake API: {date_ranges}")
 
+    # Chuẩn bị token dùng chung làm fallback
+    env_token = os.getenv("PANCAKE_PAGE_ACCESS_TOKEN") or os.getenv("FB_ACCESS_TOKEN")
+
     for doc_key, cfg in pages_config.items():
         page_id = cfg.get("page_id")
         token = cfg.get("pancake_token")
-        doctor_name = cfg.get("doctor_name")
+        doctor_name_raw = cfg.get("doctor_name")
+        doctor_name = normalize_doctor_name(doctor_name_raw)
         
-        # Fallback to .env token if matches default page id
-        env_page_id = os.getenv("PANCAKE_PAGE_ID")
-        env_token = os.getenv("PANCAKE_PAGE_ACCESS_TOKEN") or os.getenv("FB_ACCESS_TOKEN")
+        # Đoán chuyên khoa dựa trên tên bác sĩ hoặc gán mặc định
+        specialty_name = "Cột Sống" if "Tuyên" in doctor_name or "Định" in doctor_name else "Thần Kinh"
         
-        if (not token or "YOUR" in token) and page_id == env_page_id:
+        # Nếu token là placeholder hoặc rỗng, dùng token dùng chung
+        if not token or "YOUR" in token:
             token = env_token
             
         if not token or "YOUR" in token or not page_id:
@@ -153,18 +214,19 @@ def analyze_pancake_data(start_date, end_date, pages_config):
                 break
                 
         if has_api_error:
-            logger.warning(f"[-] Bỏ qua kết quả Pancake của {doctor_name} do API bị lỗi. Sẽ dùng SQL fallback riêng cho bác sĩ này.")
+            logger.warning(f"[-] Bỏ qua kết quả Pancake của {doctor_name} do API bị lỗi.")
             continue
             
-        successful_pancake_doctors.add(doctor_name)
         logger.info(f"   - Lấy thành công {len(all_convs)} cuộc hội thoại cho {doctor_name} từ {start_date} đến {end_date}.")
         
         # Phân tích từng cuộc hội thoại (lấy trực tiếp thông tin từ metadata của cuộc hội thoại, không gọi fetch_messages)
         for conv in all_convs:
             ads_list = conv.get("ads") or []
-            # Chỉ phân tích các cuộc hội thoại có gắn với Ads (ad_id)
+            
+            # Nếu cuộc hội thoại không gắn với Ads, ta xem là "organic" (nhưng Pancake stats vẫn đếm)
+            # Tuy nhiên, nếu ads_list rỗng, ta gán ad_id là 'organic'
             if not ads_list:
-                continue
+                ads_list = [{"ad_id": "organic"}]
                 
             conv_type = conv.get("type", "inbox")
             
@@ -172,179 +234,103 @@ def analyze_pancake_data(start_date, end_date, pages_config):
             inserted_at_str = conv.get("inserted_at")
             if not inserted_at_str:
                 continue
-            chat_date = inserted_at_str.split("T")[0]
             
-            # Kiểm tra xem hội thoại có SĐT hay không trực tiếp từ trường của Pancake
-            has_phone = conv.get("has_phone", False) or bool(conv.get("recent_phone_numbers"))
+            # Parse UTC sang múi giờ Việt Nam (+7) trước khi lấy ngày để so khớp chính xác với Ads
+            try:
+                # Pancake timestamp format: "2026-06-22T07:54:35.330000Z" or without Z
+                ts_str = inserted_at_str.replace("Z", "")
+                dt_utc = datetime.fromisoformat(ts_str)
+                # Cộng thêm 7 tiếng cho múi giờ VN
+                dt_vn = dt_utc + timedelta(hours=7)
+                chat_date = dt_vn.strftime("%Y-%m-%d")
+            except Exception as e:
+                # Fallback if parse error
+                chat_date = inserted_at_str.split("T")[0]
             
-            # Kiểm tra xem Page đã trả lời chưa từ trường last_sent_by
+            # 1. Đếm số điện thoại
+            has_phone = conv.get("has_phone", False)
+            if not has_phone and conv.get("recent_phone_numbers"):
+                phones = conv.get("recent_phone_numbers")
+                if isinstance(phones, list):
+                    for p in phones:
+                        if p and REGEX_PHONE.match(str(p).strip()):
+                            has_phone = True
+                            break
+                elif isinstance(phones, str):
+                    if REGEX_PHONE.match(phones.strip()):
+                        has_phone = True
+            
+            # 2. Kiểm tra phản hồi của page
             last_sent = conv.get("last_sent_by")
             has_reply = False
             if last_sent:
                 if last_sent.get("id") == page_id or last_sent.get("admin_name"):
                     has_reply = True
             
+            # 3. Kiểm tra khtn (inbox và messages_count >= 3)
+            messages_count = conv.get("messages_count", 0)
+            has_khtn = (conv_type == "inbox") and (messages_count >= 3)
+            
+            # 4. Kiểm tra đặt lịch (bookings hoặc tags đặt hẹn)
+            has_booking = False
+            bookings = conv.get("bookings") or []
+            for b in bookings:
+                if b and isinstance(b, dict):
+                    status = b.get("status", "").lower()
+                    if status not in ["cancelled", "cancel", "hủy", "huy"]:
+                        has_booking = True
+                        break
+            
+            if not has_booking:
+                tags = conv.get("tags") or []
+                booking_keywords = ["đặt lịch", "chốt lịch", "booking", "lên lịch", "hen kham", "hẹn khám", "chốt hẹn", "đã hẹn"]
+                for tag in tags:
+                    tag_name = ""
+                    if isinstance(tag, dict):
+                        tag_name = tag.get("name", "")
+                    elif isinstance(tag, str):
+                        tag_name = tag
+                    tag_name_lower = tag_name.lower().strip()
+                    if any(kw in tag_name_lower for kw in booking_keywords):
+                        has_booking = True
+                        break
+
             # Cập nhật thống kê theo từng ad_id và date
             for ad in ads_list:
-                ad_id = ad.get("ad_id")
-                if not ad_id:
-                    continue
+                ad_id = ad.get("ad_id") or "organic"
                 
-                key = (chat_date, ad_id)
+                key = (chat_date, ad_id, doctor_name)
                 if key not in pancake_stats:
                     pancake_stats[key] = {
-                        "pancake_chats": 0,
-                        "qualified_chats": 0,
-                        "leads": 0,
+                        "pancake_chat": 0,
                         "pancake_comment": 0,
-                        "reply_count": 0
+                        "pancake_phone": 0,
+                        "dat_lich": 0,
+                        "reply_count": 0,
+                        "khtn": 0,
+                        "doctor_name": doctor_name,
+                        "specialty_name": specialty_name
                     }
                     
                 stats = pancake_stats[key]
-                stats["pancake_chats"] += 1
-                
-                if conv_type == "comment":
+                if conv_type != "comment":
+                    stats["pancake_chat"] += 1
+                else:
                     stats["pancake_comment"] += 1
                     
                 if has_phone:
-                    stats["qualified_chats"] += 1
-                    stats["leads"] += 1
+                    stats["pancake_phone"] += 1
                     
                 if has_reply:
                     stats["reply_count"] += 1
 
-    return pancake_stats, successful_pancake_doctors
+                if has_khtn:
+                    stats["khtn"] += 1
+                    
+                if has_booking:
+                    stats["dat_lich"] += 1
 
-def fallback_sql_aggregation(client, project_id, dataset_id, table_ref, start_date, end_date):
-    """
-    Phương án dự phòng: Tổng hợp dữ liệu thuần túy bằng SQL từ fb_ad_insights và botcake_leads.
-    """
-    logger.info("[Fallback] Đang sử dụng cơ chế SQL để tổng hợp dữ liệu (do không có token Pancake)...")
-    
-    # Xóa dữ liệu cũ
-    delete_sql = f"DELETE FROM `{table_ref}` WHERE date BETWEEN '{start_date}' AND '{end_date}'"
-    client.query(delete_sql).result()
-    
-    insert_sql = f"""
-        INSERT INTO `{table_ref}` (
-          date, specialty_name, doctor_name, ad_id, ad_name, angle, ad_post_name, ad_format,
-          impressions, clicks, ctr, fb_mess, thruplay, video_views, thruplay_rate, retention_rate,
-          spend, pancake_chats, qualified_chats, reply_rate, leads, lead_rate, inserted_at,
-          fb_comment, fb_lead, pancake_comment, pancake_lead, cost_per_lead, cost_per_phone
-        )
-        WITH ads_daily AS (
-          SELECT
-            start_date AS date,
-            ad_id,
-            MAX(ad_name) AS ad_name,
-            MAX(specialty_name) AS specialty_name,
-            MAX(doctor_name) AS doctor_name,
-            SUM(spend) AS spend,
-            SUM(clicks) AS clicks,
-            SUM(impressions) AS impressions,
-            SUM(mes) AS mes,
-            SUM(cmt) AS cmt,
-            SUM(video_views) AS video_views,
-            SUM(thruplay) AS thruplay,
-            SUM(video_100) AS video_100
-          FROM `{project_id}.{dataset_id}.fb_ad_insights`
-          WHERE start_date BETWEEN '{start_date}' AND '{end_date}'
-          GROUP BY start_date, ad_id
-        ),
-        crm_daily AS (
-          SELECT
-            lead_date AS date,
-            COALESCE(ad_id, 'organic') AS ad_id,
-            MAX(doctor_name) AS doctor_name,
-            MAX(specialty_name) AS specialty_name,
-            COUNT(DISTINCT phone) AS phone_count
-          FROM `{project_id}.{dataset_id}.botcake_leads`
-          WHERE lead_date BETWEEN '{start_date}' AND '{end_date}'
-          GROUP BY lead_date, COALESCE(ad_id, 'organic')
-        ),
-        all_keys AS (
-          SELECT date, ad_id FROM ads_daily
-          UNION DISTINCT
-          SELECT date, ad_id FROM crm_daily
-        ),
-        combined AS (
-          SELECT
-            k.date,
-            COALESCE(a.specialty_name, c.specialty_name, 'Unknown') AS specialty_name,
-            COALESCE(a.doctor_name, c.doctor_name, 'Unknown') AS doctor_name,
-            k.ad_id,
-            COALESCE(a.ad_name, 'Organic') AS ad_name,
-            
-            CASE 
-              WHEN REGEXP_CONTAINS(LOWER(COALESCE(a.ad_name, '')), 'feedback') THEN 'Feedback'
-              WHEN REGEXP_CONTAINS(LOWER(COALESCE(a.ad_name, '')), 'chuyen_gia') THEN 'Chuyên gia'
-              ELSE 'Unknown'
-            END AS angle,
-            
-            CASE 
-              WHEN REGEXP_CONTAINS(COALESCE(a.ad_name, ''), 'Feedback_') THEN REGEXP_EXTRACT(a.ad_name, r'Feedback_(.*?)_')
-              ELSE COALESCE(a.ad_name, 'Organic')
-            END AS ad_post_name,
-            
-            CASE 
-              WHEN REGEXP_CONTAINS(LOWER(COALESCE(a.ad_name, '')), 'video') THEN 'Video'
-              ELSE 'Image'
-            END AS ad_format,
-            
-            IFNULL(a.impressions, 0) AS impressions,
-            IFNULL(a.clicks, 0) AS clicks,
-            IFNULL(a.mes, 0) AS fb_mess,
-            IFNULL(a.thruplay, 0) AS thruplay,
-            IFNULL(a.video_views, 0) AS video_views,
-            IFNULL(a.spend, 0.0) AS spend,
-            
-            IFNULL(a.mes, 0) + IFNULL(a.cmt, 0) AS pancake_chats,
-            IFNULL(c.phone_count, 0) AS qualified_chats,
-            IFNULL(c.phone_count, 0) AS leads,
-            
-            IFNULL(a.cmt, 0) AS fb_comment,
-            IFNULL(a.mes, 0) + IFNULL(a.cmt, 0) AS fb_lead,
-            IFNULL(a.cmt, 0) AS pancake_comment,
-            IFNULL(a.mes, 0) + IFNULL(a.cmt, 0) AS pancake_lead
-            
-          FROM all_keys k
-          LEFT JOIN ads_daily a ON k.ad_id = a.ad_id AND k.date = a.date
-          LEFT JOIN crm_daily c ON k.ad_id = c.ad_id AND k.date = c.date
-        )
-        SELECT 
-          date,
-          specialty_name,
-          doctor_name,
-          ad_id,
-          ad_name,
-          angle,
-          COALESCE(ad_post_name, ad_name) AS ad_post_name,
-          ad_format,
-          impressions,
-          clicks,
-          ROUND(SAFE_DIVIDE(clicks, impressions), 4) AS ctr,
-          fb_mess,
-          thruplay,
-          video_views,
-          ROUND(SAFE_DIVIDE(thruplay, video_views), 4) AS thruplay_rate,
-          0.0 AS retention_rate,
-          spend,
-          pancake_chats,
-          qualified_chats,
-          ROUND(SAFE_DIVIDE(qualified_chats, pancake_chats), 4) AS reply_rate,
-          leads,
-          ROUND(SAFE_DIVIDE(leads, pancake_chats), 4) AS lead_rate,
-          CURRENT_TIMESTAMP() AS inserted_at,
-          fb_comment,
-          fb_lead,
-          pancake_comment,
-          pancake_lead,
-          ROUND(SAFE_DIVIDE(spend, pancake_lead), 2) AS cost_per_lead,
-          ROUND(SAFE_DIVIDE(spend, leads), 2) AS cost_per_phone
-        FROM combined
-    """
-    client.query(insert_sql).result()
-    logger.info("[Fallback] Cập nhật bảng bằng cơ chế SQL thành công.")
+    return pancake_stats
 
 def run_sync(start_date: str, end_date: str):
     project_id = os.getenv("GCP_PROJECT_ID", "gen-lang-client-0738410622")
@@ -374,105 +360,117 @@ def run_sync(start_date: str, end_date: str):
 
     # 2. Gọi Pancake API để lấy thống kê hội thoại thực tế
     pancake_stats = {}
-    successful_pancake_doctors = set()
     try:
-        pancake_stats, successful_pancake_doctors = analyze_pancake_data(start_date, end_date, pages_config)
+        pancake_stats = analyze_pancake_data(start_date, end_date, pages_config)
     except Exception as e:
         logger.error(f"[Pancake API] Thất bại khi phân tích dữ liệu Pancake: {e}", exc_info=True)
 
-    # Nếu không thu thập được bất kỳ bác sĩ nào thành công từ Pancake API, chuyển sang fallback dùng SQL thuần
-    if not successful_pancake_doctors:
-        logger.warning("[Pancake API] Không có bác sĩ nào lấy được dữ liệu thành công từ Pancake API. Sử dụng cơ chế SQL fallback.")
-        fallback_sql_aggregation(client, project_id, dataset_id, table_ref, start_date, end_date)
-        return
-
-    # Luôn lấy dữ liệu CRM từ BigQuery để dùng cho hybrid fallback đối với những bác sĩ bị lỗi Pancake API
-    logger.info(f"[*] Đang lấy dữ liệu CRM từ botcake_leads cho hybrid fallback...")
-    crm_sql = f"""
-        SELECT
-          lead_date AS date,
-          COALESCE(ad_id, 'organic') AS ad_id,
-          doctor_name,
-          COUNT(DISTINCT phone) AS phone_count
-        FROM `{project_id}.{dataset_id}.botcake_leads`
-        WHERE lead_date BETWEEN '{start_date}' AND '{end_date}'
-        GROUP BY lead_date, COALESCE(ad_id, 'organic'), doctor_name
-    """
-    crm_map = {}
+    # 3. Lấy dữ liệu Facebook Ads trực tiếp từ API (Không dùng BQ fb_ad_insights)
+    logger.info(f"[*] Đang lấy dữ liệu Facebook Ads trực tiếp từ Facebook API: {start_date} ➔ {end_date}...")
+    fb_rows = []
     try:
-        crm_rows = [dict(r) for r in client.query(crm_sql).result()]
-        for r in crm_rows:
-            date_str = r['date'].strftime("%Y-%m-%d")
-            doc_name_lower = r['doctor_name'].strip().lower() if r['doctor_name'] else ""
-            crm_map[(date_str, r['ad_id'], doc_name_lower)] = r['phone_count']
-        logger.info(f"   - Lấy được {len(crm_rows)} dòng CRM từ BigQuery để làm bản đồ fallback.")
+        account_ids = list(AD_ACCOUNTS.keys())
+        raw_insights = fetch_all_accounts(account_ids, start_date, end_date)
+        
+        unique_ad_ids = list({
+            normalize_ad_id(row.get("ad_id"))
+            for row in raw_insights
+            if normalize_ad_id(row.get("ad_id"))
+        })
+        ad_details = fetch_ad_details(unique_ad_ids)
+        
+        run_date = date.today().strftime("%Y-%m-%d")
+        transformed_rows = transform_fb_ads(
+            insights=raw_insights,
+            ad_details=ad_details,
+            account_specialty_map=AD_ACCOUNTS,
+            start_date=start_date,
+            end_date=end_date,
+            run_date=run_date
+        )
+        
+        # Nhóm transformed_rows theo (date, ad_id) giống câu query BQ trước đây
+        fb_groups = {}
+        for r in transformed_rows:
+            d_str = r.get("start_date")
+            d = datetime.strptime(d_str, "%Y-%m-%d").date()
+            ad_id = r.get("ad_id")
+            
+            # Chuẩn hóa tên bác sĩ từ campaign name
+            doc_name_raw = r.get("doctor_name")
+            doc_name = normalize_doctor_name(doc_name_raw)
+            
+            key = (d, ad_id, doc_name)
+            if key not in fb_groups:
+                fb_groups[key] = {
+                    "date": d,
+                    "ad_id": ad_id,
+                    "ad_name": r.get("ad_name"),
+                    "specialty_name": r.get("specialty_name"),
+                    "doctor_name": doc_name,
+                    "spend": 0.0,
+                    "clicks": 0,
+                    "impressions": 0,
+                    "mes": 0,
+                    "cmt": 0,
+                    "video_views": 0,
+                    "thruplay": 0,
+                    "video_100": 0
+                }
+            g = fb_groups[key]
+            g["spend"] += float(r.get("spend") or 0.0)
+            g["clicks"] += int(r.get("clicks") or 0)
+            g["impressions"] += int(r.get("impressions") or 0)
+            g["mes"] += int(r.get("mes") or 0)
+            g["cmt"] += int(r.get("cmt") or 0)
+            g["video_views"] += int(r.get("video_views") or 0)
+            g["thruplay"] += int(r.get("thruplay") or 0)
+            g["video_100"] += int(r.get("video_100") or 0)
+            
+            if r.get("ad_name"):
+                g["ad_name"] = r.get("ad_name")
+            if r.get("specialty_name"):
+                g["specialty_name"] = r.get("specialty_name")
+                
+        fb_rows = list(fb_groups.values())
+        logger.info(f"   - Lấy thành công {len(fb_rows)} dòng quảng cáo từ Facebook Ads API.")
     except Exception as e:
-        logger.error(f"[-] Lỗi khi lấy dữ liệu CRM phục vụ fallback: {e}")
-
-    # 3. Lấy dữ liệu Facebook Ads từ BigQuery
-    logger.info(f"[*] Đang lấy dữ liệu Facebook Ads từ BigQuery: {start_date} ➔ {end_date}...")
-    fb_sql = f"""
-        SELECT
-          start_date AS date,
-          ad_id,
-          MAX(ad_name) AS ad_name,
-          MAX(specialty_name) AS specialty_name,
-          MAX(doctor_name) AS doctor_name,
-          SUM(spend) AS spend,
-          SUM(clicks) AS clicks,
-          SUM(impressions) AS impressions,
-          SUM(mes) AS mes,
-          SUM(cmt) AS cmt,
-          SUM(video_views) AS video_views,
-          SUM(thruplay) AS thruplay,
-          SUM(video_100) AS video_100
-        FROM `{project_id}.{dataset_id}.fb_ad_insights`
-        WHERE start_date BETWEEN '{start_date}' AND '{end_date}'
-        GROUP BY start_date, ad_id
-    """
-    fb_rows = [dict(r) for r in client.query(fb_sql).result()]
-    logger.info(f"   - Lấy được {len(fb_rows)} dòng quảng cáo từ BigQuery.")
+        logger.error(f"[-] Lỗi khi gọi Facebook API: {e}", exc_info=True)
 
     # 4. Gộp dữ liệu Facebook Ads và Pancake
     combined_data = []
     
-    # Gom tất cả các key (date, ad_id) duy nhất
-    all_keys = set((r["date"].strftime("%Y-%m-%d"), r["ad_id"]) for r in fb_rows)
-    all_keys.update(pancake_stats.keys())
-    
+    # Gom tất cả các key (date_str, ad_id, doctor_name) duy nhất
+    all_keys = set()
+    for r in fb_rows:
+        date_str = r["date"].strftime("%Y-%m-%d")
+        all_keys.add((date_str, r["ad_id"], r["doctor_name"]))
+        
+    for (chat_date, ad_id, doc_name) in pancake_stats.keys():
+        all_keys.add((chat_date, ad_id, doc_name))
+        
     # Map để tra cứu fb_rows nhanh
-    fb_map = {(r["date"].strftime("%Y-%m-%d"), r["ad_id"]): r for r in fb_rows}
+    fb_map = {(r["date"].strftime("%Y-%m-%d"), r["ad_id"], r["doctor_name"]): r for r in fb_rows}
     
-    # Tạo map bác sĩ từ pages_config để điền doctor/specialty cho dòng chỉ có ở Pancake
-    page_to_doctor = {}
-    for cfg in pages_config.values():
-        p_id = cfg.get("page_id")
-        if p_id:
-            page_to_doctor[p_id] = {
-                "doctor_name": cfg.get("doctor_name"),
-                # Đoán chuyên khoa dựa trên tên bác sĩ hoặc gán mặc định
-                "specialty_name": "Cột Sống" if "Tuyên" in cfg.get("doctor_name") or "Định" in cfg.get("doctor_name") else "Thần Kinh"
-            }
-
     now_iso = datetime.utcnow().isoformat() + "Z"
 
-    successful_pancake_doctors_lower = {name.lower().strip() for name in successful_pancake_doctors}
-
-    for chat_date, ad_id in all_keys:
-        fb_info = fb_map.get((chat_date, ad_id)) or {}
-        doc_name = fb_info.get("doctor_name") or "Unknown"
-        doc_name_lower = doc_name.strip().lower()
+    for chat_date, ad_id, doc_name in all_keys:
+        fb_info = fb_map.get((chat_date, ad_id, doc_name)) or {}
+        p_info = pancake_stats.get((chat_date, ad_id, doc_name))
         
-        # Kiểm tra xem bác sĩ của quảng cáo này có lấy dữ liệu Pancake API thành công không
-        is_pancake_success = doc_name_lower in successful_pancake_doctors_lower
-        p_info = pancake_stats.get((chat_date, ad_id))
-        
-        # Xác định doctor name và specialty
-        spec_name = fb_info.get("specialty_name") or "Unknown"
-        ad_name = fb_info.get("ad_name") or "Organic"
-        
+        # Xác định các thuộc tính văn bản
+        # Ưu tiên lấy specialty từ Pancake (nếu có p_info) hoặc Facebook Ads
+        spec_name = fb_info.get("specialty_name")
+        if not spec_name and p_info:
+            spec_name = p_info["specialty_name"]
+        if not spec_name:
+            spec_name = "Cột Sống" if "Tuyên" in doc_name or "Định" in doc_name else "Thần Kinh"
+            
+        ad_name = fb_info.get("ad_name")
+        if not ad_name:
+            ad_name = "Organic" if ad_id == "organic" else f"Unknown_Ad_{ad_id}"
+            
         # Parsing angles, format theo cú pháp mới: Angle_tên bài_id post fb
-        # Ví dụ: HoiChungRuotKichThich_BaiViet1_1234567890
         parts = ad_name.split("_")
         
         if ad_name == "Organic":
@@ -482,7 +480,6 @@ def run_sync(start_date: str, end_date: str):
             angle = parts[0].strip()
             ad_post_name = parts[1].strip()
         else:
-            # Fallback logic cũ
             ad_name_lower = ad_name.lower()
             angle = "Unknown"
             if "feedback" in ad_name_lower:
@@ -496,8 +493,9 @@ def run_sync(start_date: str, end_date: str):
                 if match:
                     ad_post_name = match.group(1)
                 
-        ad_format = "Video" if "video" in ad_name_lower else "Image"
+        ad_format = "Video" if "video" in ad_name.lower() else "Image"
         
+        # Các chỉ số Ads
         spend = fb_info.get("spend") or 0.0
         impressions = fb_info.get("impressions") or 0
         clicks = fb_info.get("clicks") or 0
@@ -510,30 +508,29 @@ def run_sync(start_date: str, end_date: str):
         video_views = fb_info.get("video_views") or 0
         thruplay_rate = thruplay / video_views if video_views > 0 else 0.0
 
-        if is_pancake_success and p_info:
-            # Dùng dữ liệu Pancake API thật
-            pancake_chats = p_info["pancake_chats"]
-            qualified_chats = p_info["qualified_chats"]
-            leads = p_info["leads"]
+        # Chỉ số hội thoại & chuyển đổi từ Pancake API
+        if p_info:
+            pancake_chat = p_info["pancake_chat"]
             pancake_comment = p_info["pancake_comment"]
-            pancake_lead = pancake_chats  # Tổng chats
-            reply_count = p_info["reply_count"]
+            pancake_lead = pancake_chat + pancake_comment
+            pancake_phone = p_info["pancake_phone"]
+            dat_lich = p_info["dat_lich"]
+            khtn = p_info["khtn"]
         else:
-            # Fallback sang SQL/CRM cho bác sĩ bị lỗi hoặc thiếu Pancake token
-            pancake_chats = fb_mess + fb_comment
+            # Fallback nếu không có dữ liệu Pancake (ví dụ Ads chạy nhưng không kéo được Pancake)
+            # Theo yêu cầu, không dùng botcake_leads nữa. Ta chỉ dùng dữ liệu fb_mess/fb_comment làm chỉ số chat cơ bản, phone và dat_lich gán = 0
+            pancake_chat = fb_mess
             pancake_comment = fb_comment
-            pancake_lead = pancake_chats
+            pancake_lead = pancake_chat + pancake_comment
+            pancake_phone = 0
+            dat_lich = 0
+            khtn = 0
             
-            # Tra cứu CRM phone count làm số điện thoại
-            leads = crm_map.get((chat_date, ad_id, doc_name_lower), 0)
-            qualified_chats = leads
-            reply_count = qualified_chats # Giả lập reply
-            
-        reply_rate = reply_count / pancake_chats if pancake_chats > 0 else 0.0
-        lead_rate = leads / pancake_chats if pancake_chats > 0 else 0.0
+        pancake_phone_rate = pancake_phone / pancake_lead if pancake_lead > 0 else 0.0
+        dat_lich_rate = dat_lich / pancake_lead if pancake_lead > 0 else 0.0
         
         cost_per_lead = spend / pancake_lead if pancake_lead > 0 else 0.0
-        cost_per_phone = spend / leads if leads > 0 else 0.0
+        cost_per_phone = spend / dat_lich if dat_lich > 0 else 0.0
 
         row = {
             "date": chat_date,
@@ -551,18 +548,19 @@ def run_sync(start_date: str, end_date: str):
             "thruplay": thruplay,
             "video_views": video_views,
             "thruplay_rate": thruplay_rate,
-            "retention_rate": 0.0,
+            "retention_rate": 0.0, # Sẽ được cập nhật sau bằng script update_retention_rate
             "spend": spend,
-            "pancake_chats": pancake_chats,
-            "qualified_chats": qualified_chats,
-            "reply_rate": reply_rate,
-            "leads": leads,
-            "lead_rate": lead_rate,
+            "pancake_chat": pancake_chat,
+            "pancake_comment": pancake_comment,
+            "pancake_lead": pancake_lead,
+            "pancake_phone": pancake_phone,
+            "pancake_phone_rate": pancake_phone_rate,
+            "dat_lich": dat_lich,
+            "dat_lich_rate": dat_lich_rate,
+            "khtn": khtn,
             "inserted_at": now_iso,
             "fb_comment": fb_comment,
             "fb_lead": fb_lead,
-            "pancake_comment": pancake_comment,
-            "pancake_lead": pancake_lead,
             "cost_per_lead": cost_per_lead,
             "cost_per_phone": cost_per_phone
         }
