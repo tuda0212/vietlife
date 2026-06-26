@@ -4,6 +4,7 @@ Dùng Application Default Credentials (ADC) trên Cloud Run.
 Port logic từ buildCrmAdIdMapFromSpreadsheet_() trong Apps Script.
 """
 
+import os
 import logging
 import re
 import unicodedata
@@ -32,7 +33,21 @@ _arrival_cache = {}
 def _get_sheets_service():
     global _sheets_service
     if _sheets_service is None:
-        # Thử lấy access token từ gcloud CLI (ưu tiên khi chạy local để tránh lỗi scope của ADC)
+        # 1. Thử dùng Service Account chỉ định bởi GOOGLE_APPLICATION_CREDENTIALS trước
+        sa_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        if sa_path and os.path.exists(sa_path):
+            try:
+                credentials = service_account.Credentials.from_service_account_file(
+                    sa_path,
+                    scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
+                )
+                _sheets_service = build("sheets", "v4", credentials=credentials, cache_discovery=False)
+                logger.info(f"[Sheets] Sử dụng Service Account từ {sa_path} thành công.")
+                return _sheets_service
+            except Exception as e:
+                logger.warning(f"[Sheets] Không dùng được Service Account từ {sa_path}: {e}")
+
+        # 2. Thử lấy access token từ gcloud CLI (chạy local)
         try:
             token = subprocess.check_output(
                 ["gcloud", "auth", "print-access-token"],
@@ -40,14 +55,16 @@ def _get_sheets_service():
                 stderr=subprocess.DEVNULL
             ).strip()
             if token:
+                # Không lưu vào global _sheets_service nếu dùng access token thô của gcloud CLI vì nó sẽ hết hạn sau 1 tiếng.
+                # Trả về service instance tạm thời để lần sau gọi lại gcloud tạo token mới.
                 credentials = Credentials(token)
-                _sheets_service = build("sheets", "v4", credentials=credentials, cache_discovery=False)
-                logger.info("[Sheets] Sử dụng access token từ gcloud CLI thành công.")
-                return _sheets_service
+                service = build("sheets", "v4", credentials=credentials, cache_discovery=False)
+                logger.info("[Sheets] Sử dụng access token tạm thời từ gcloud CLI.")
+                return service
         except Exception as e:
-            logger.warning(f"[Sheets] Không lấy được token từ gcloud CLI (sẽ fallback sang ADC mặc định): {e}")
+            logger.warning(f"[Sheets] Không lấy được token từ gcloud CLI: {e}")
 
-        # Fallback sang ADC mặc định
+        # 3. Fallback sang ADC mặc định
         credentials, _ = google_auth_default(
             scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
         )
